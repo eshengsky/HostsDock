@@ -1,0 +1,34 @@
+{
+  "name": "hostsdock",
+  "productName": "HostsDock",
+  "version": "1.0.0",
+  "description": "Store, manage and switch your hosts easily.",
+  "main": "main.js",
+  "authors": [
+    "Sky Sun"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "HostsDock",
+    "storage",
+    "manage",
+    "switch",
+    "hosts"
+  ],
+  "moduleType": [],
+  "homepage": "",
+  "private": true,
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "jquery": "^2.2.4",
+    "font-awesome": "^4.6.3",
+    "sweetalert": "^1.1.3",
+    "Buttons": "^2.0.0"
+  }
+}

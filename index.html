@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>HostsDock</title>
+    <link rel="stylesheet" href="bower_components/font-awesome/css/font-awesome.min.css">
+    <link rel="stylesheet" href="bower_components/sweetalert/dist/sweetalert.css">
+    <link rel="stylesheet" href="public/css/swal-forms.css">
+    <link rel="stylesheet" href="bower_components/Buttons/css/buttons.min.css">
+    <link rel="stylesheet" href="public/css/index.css">
+</head>
+<body>
+<nav>
+    <div class="nav-items">
+        <div class="nav-wrapper is-open">
+            <button class="toggle-title title-sys">
+                系统
+                <p>系统hosts信息</p>
+            </button>
+            <ul class="nav-sys">
+                <li>
+                    <a class="lk-hosts" data-hosts-id="system">
+                        <i class="fa fa-gear"></i> <span>当前系统hosts</span><i class="loading fa fa-spinner fa-spin"
+                                                                            title="加载中"></i>
+                    </a>
+                </li>
+                <li class="time-li" title="系统hosts修改时间">
+                    <i class="fa fa-clock-o"></i> 更新于 <span id="modified-time">2016/01/01 10:34:20</span>
+                </li>
+            </ul>
+        </div>
+        <div class="nav-wrapper is-open">
+            <button class="toggle-title title-local">
+                本地
+                <p>本地hosts方案</p>
+            </button>
+            <ul class="nav-local">
+            </ul>
+        </div>
+        <div class="nav-wrapper is-open">
+            <button class="toggle-title title-remote">
+                远程
+                <p>远程hosts方案</p>
+            </button>
+            <ul class="nav-remote">
+            </ul>
+        </div>
+    </div>
+    <footer class="nav-footer">
+        <button class="button button-action button-circle" id="btnNew" title="新建"><i class="fa fa-plus"></i>
+        </button>
+    </footer>
+</nav>
+<main>
+    <div id="hosts-tool">
+        <button class="button button-borderless button-small" id="btnUndo" title="撤销(Ctrl+Z)">
+            <i class="fa fa-undo"></i>
+        </button>
+        <button class="button button-borderless button-small" id="btnRedo" title="重做(Ctrl+Shift+Z)">
+            <i class="fa fa-repeat"></i>
+        </button>
+        <button class="button button-borderless button-small" id="btnCopy" title="复制(Ctrl+C)">
+            <i class="fa fa-copy"></i>
+        </button>
+        <button class="button button-borderless button-small" id="btnCut" title="剪切(Ctrl+X)">
+            <i class="fa fa-scissors"></i>
+        </button>
+        <button class="button button-borderless button-small" id="btnPaste" title="粘贴(Ctrl+V)">
+            <i class="fa fa-paste"></i>
+        </button>
+        <button class="button button-borderless button-small" id="btnSearch" title="查找(Ctrl+F)">
+            <i class="fa fa-search"></i>
+        </button>
+        <button class="button button-borderless button-small" id="btnReplace" title="替换(Ctrl+H)">
+            <i class="fa fa-binoculars"></i>
+        </button>
+        <!--<button class="button button-borderless button-small" id="btnPlus" title="放大">-->
+        <!--<i class="fa fa-plus"></i>-->
+        <!--</button>-->
+        <!--<button class="button button-borderless button-small" id="btnMinus" title="缩小">-->
+        <!--<i class="fa fa-minus"></i>-->
+        <!--</button>-->
+        <!--<button class="button button-borderless button-small" id="btnAnalyse" title="智能分析">-->
+        <!--<i class="fa fa-flash"></i>-->
+        <!--</button>-->
+    </div>
+    <div id="hosts-content" class="content" contenteditable="true">
+    </div>
+    <footer>
+        <button class="button button-primary button-circle" id="btnRefresh" title="刷新">
+            <i class="fa fa-refresh"></i>
+        </button>
+        <button class="button button-royal button-circle" id="btnEdit" title="编辑" style="display:none;">
+            <i class="fa fa-pencil"></i>
+        </button>
+        <button class="button button-caution button-circle" id="btnDelete" title="删除" style="display:none;">
+            <i class="fa fa-trash-o"></i>
+        </button>
+        <button class="button button-highlight button-circle" id="btnApply" title="应用"
+                style="float:right;display:none;">
+            <i class="fa fa-check"></i>
+        </button>
+    </footer>
+</main>
+<script src="./public/javascript/ace/ace.js" type="text/javascript" charset="utf-8"></script>
+<script src="./public/javascript/ace/ext-searchbox.js" type="text/javascript" charset="utf-8"></script>
+<script>
+    window.$ = window.jQuery = require('./bower_components/jquery/dist/jquery.min.js');
+    require('./bower_components/sweetalert/dist/sweetalert.min.js');
+    require('./public/javascript/swal-forms.js');
+    require('./public/javascript/index.js');
+</script>
+</body>
+</html>

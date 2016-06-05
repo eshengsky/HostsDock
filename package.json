@@ -1,0 +1,29 @@
+{
+  "name": "hostsdock",
+  "productName": "HostsDock",
+  "version": "1.0.0",
+  "description": "Store, manage and switch your hosts easily.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "keywords": [
+    "HostsDock",
+    "storage",
+    "manage",
+    "switch",
+    "hosts"
+  ],
+  "author": "Sky Sun",
+  "license": "MIT",
+  "devDependencies": {
+    "electron-prebuilt": "^1.2.0"
+  },
+  "dependencies": {
+    "async": "^2.0.0-rc.5",
+    "moment": "^2.13.0",
+    "node-notifier": "^4.6.0",
+    "request": "^2.72.0",
+    "shortid": "^2.2.6"
+  }
+}
