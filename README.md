@@ -2,7 +2,7 @@
 :tada: 存储、管理、快速切换你的hosts。  
 基于 [Node.js](https://nodejs.org) 和 [Electron](http://electron.atom.io/) 构建。
 
-## 应用预览
+## 界面预览
 ![image](https://github.com/eshengsky/HostsDock/blob/master/public/review.png)
 
 ## 功能特色
@@ -17,12 +17,16 @@
 ## 兼容性
 支持 OS X, Windows 及 Linux 操作系统，详细的支持情况参见 [Supported Platforms](http://electron.atom.io/docs/tutorial/supported-platforms/)。
 
-## :gift: 压缩包下载
-这里是已经打包好的应用，下载压缩包并解压，执行文件夹中的 HostsDock.app 或 HostsDock.exe 即可运行。  
-请根据你的操作系统选择合适的压缩包下载。  
+## :gift: 应用下载
+#### 地址
 https://github.com/eshengsky/HostsDock/releases
 
-## 编译运行
+#### 说明
+1. 地址中是已经打包好的应用，直接下载压缩包并解压，执行文件夹中的 HostsDock.app 或 HostsDock.exe 即可运行。
+2. 请根据你的操作系统选择合适的压缩包下载。
+3. OS X 的系统暂不提供直接下载，请自行[打包](#如何打包)。
+
+## 快速开始
 请确保已成功安装 [Node.js](https://nodejs.org/en/download/) 和 [NPM](https://www.npmjs.com/)。  
 #### 全局安装 bower
 ```shell
@@ -52,7 +56,7 @@ $ npm start --debug
 $ npm install -g electron-packager
 ```
 #### 打包应用
-进入需要打包的应用的目录，执行：
+在完成了[快速开始](#快速开始)全部操作的前提下，进入需要打包的应用的目录，执行：
 ```shell
 $ electron-packager . --all --asar --prune
 ```
