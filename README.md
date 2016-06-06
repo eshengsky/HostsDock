@@ -60,7 +60,7 @@ $ electron-packager . --all --asar --prune
 
 #### 注意事项
 * 打包过程中 electron-packager 会自动下载所需的文件并存放到 `~/.electron` 目录（Windows 系统是 `user/你的用户名/.electron`）中，自动下载可能会比较慢，建议直接在 [Electron Release](https://github.com/electron/electron/releases) 使用下载工具进行下载并放到上述目录中。
-* 在 Windows 平台下打包 Darwin 应用可能会失败，提示 `Cannnot create symlinks`，此时请使用管理员身份运行 cmd 重试。
+* 在 Windows 平台下打包 Darwin 应用可能会失败（即使没有报错打包好的应用放到 OS X 下可能也无法运行），目前没有有效的解决方案，建议在非 Windows 平台打包 Darwin 应用。详见 [Issue 164](https://github.com/electron-userland/electron-packager/issues/164)。
 
 ## 许可协议
 The MIT License (MIT)
