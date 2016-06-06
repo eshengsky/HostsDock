@@ -1,5 +1,5 @@
 # HostsDock
-存储、管理、快速切换你的hosts。  
+:tada: 存储、管理、快速切换你的hosts。  
 基于 [Node.js](https://nodejs.org) 和 [Electron](http://electron.atom.io/) 构建。
 
 ## 应用预览
@@ -17,7 +17,7 @@
 ## 兼容性
 支持 OS X, Windows 及 Linux 操作系统，详细的支持情况参见 [Supported Platforms](http://electron.atom.io/docs/tutorial/supported-platforms/)。
 
-## 压缩包下载
+## :gift: 压缩包下载
 这里是已经打包好的应用，下载压缩包并解压，执行文件夹中的 HostsDock.app 或 HostsDock.exe 即可运行。  
 请根据你的操作系统选择合适的压缩包下载。  
 https://github.com/eshengsky/HostsDock/releases
