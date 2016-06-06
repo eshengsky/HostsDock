@@ -45,7 +45,7 @@ $ npm start
 ```
 如果想以 debug 模式启动应用，请使用：
 ```shell
-$ npm start --debug
+$ npm run dev
 ```
 **Enjoy it!** :smile:
 

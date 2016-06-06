@@ -117,7 +117,7 @@ class HostsDock {
             if (err) {
                 swal({
                     title: '没有系统hosts文件的读写权限',
-                    text: '请尝试使用管理员或超级用户身份重启程序！',
+                    text: '请尝试使用管理员或超级用户身份启动应用！',
                     type: 'error'
                 });
             }
@@ -1013,6 +1013,9 @@ class HostsDock {
                             this.flushDns();
                         });
                         ws.on('error', (err)=> {
+                            if(err.message.indexOf('operation not permitted') >= 0){
+                                err = new Error('请尝试使用管理员或超级用户身份启动应用！');
+                            }
                             callback(err);
                         });
                     }
@@ -1020,6 +1023,9 @@ class HostsDock {
             } else {
                 this.copyHostsContent(id, this.systemHostsId, (err)=> {
                     if (err) {
+                        if(err.message.indexOf('operation not permitted') >= 0){
+                            err = new Error('请尝试使用管理员或超级用户身份启动应用！');
+                        }
                         callback(err);
                     } else {
                         callback(null, `已成功应用本地方案：${name}`);

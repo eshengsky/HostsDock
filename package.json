@@ -3,9 +3,15 @@
   "productName": "HostsDock",
   "version": "1.0.0",
   "description": "Store, manage and switch your hosts easily.",
+  "private": true,
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dev": "electron . --debug"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eshengsky/HostsDock.git"
   },
   "keywords": [
     "HostsDock",
@@ -16,6 +22,10 @@
   ],
   "author": "Sky Sun",
   "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/eshengsky/HostsDock/issues"
+  },
+  "homepage": "https://github.com/eshengsky/HostsDock#readme",
   "devDependencies": {
     "electron-prebuilt": "^1.2.0"
   },
