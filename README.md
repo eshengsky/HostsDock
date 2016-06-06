@@ -1,5 +1,5 @@
 # HostsDock
-:tada: 存储、管理、快速切换你的hosts。  
+:tada: 存储、管理、快速切换你的hosts，尤其适合需要在开发环境、测试环境和生产环境之间频繁切换的开发人员使用。  
 基于 [Node.js](https://nodejs.org) 和 [Electron](http://electron.atom.io/) 构建。
 
 ## 界面预览
