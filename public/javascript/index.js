@@ -1290,7 +1290,7 @@ class HostsDock {
         notifier.notify({
             title: 'HostsDock',
             message: msg,
-            icon: path.join(__dirname, 'coulson.jpg'),
+            icon: path.join(__dirname, '../image/hostsdock.png'),
             sound: true
         });
     }

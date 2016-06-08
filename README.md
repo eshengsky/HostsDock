@@ -3,7 +3,7 @@
 基于 [Node.js](https://nodejs.org) 和 [Electron](http://electron.atom.io/) 构建。
 
 ## 界面预览
-![image](https://github.com/eshengsky/HostsDock/blob/master/public/review.png)
+![image](https://github.com/eshengsky/HostsDock/blob/master/public/image/review.png)
 
 ## 功能特色
 * 支持创建本地 hosts 方案和远程 hosts 方案。
@@ -38,6 +38,10 @@ $ npm install
 ```
 ```shell
 $ bower install
+```
+#### 全局安装 electron-prebuilt
+```shell
+$ npm install -g electron-prebuilt
 ```
 #### 启动应用
 ```shell

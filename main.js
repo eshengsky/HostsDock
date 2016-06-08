@@ -97,7 +97,8 @@ function initialize() {
         var windowOptions = {
             width: 1080,
             minWidth: 680,
-            height: 840
+            height: 840,
+            icon: path.join(__dirname, '/public/image/hostsdock.png')
         };
 
         // Create the browser window.
