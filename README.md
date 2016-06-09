@@ -20,7 +20,7 @@
 ## :gift: 应用下载
 这里是已经打包好的应用，直接下载压缩包并解压，执行文件夹中的 HostsDock.app 或 HostsDock.exe 即可运行。  
 本地下载：https://github.com/eshengsky/HostsDock/releases  
-百度网盘：http://pan.baidu.com/s/1nvOZt7j  
+百度网盘：http://pan.baidu.com/s/1slCFTSx  
 
 ## 快速开始
 请确保已成功安装 [Node.js](https://nodejs.org/en/download/) 和 [NPM](https://www.npmjs.com/)。  
