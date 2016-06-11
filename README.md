@@ -21,7 +21,7 @@ Support OS X, Windows and Linux platform, see more details in [Supported Platfor
 ## :gift: Download 应用下载
 Here is packaged app, download directly then extract the compressed package, execute HostsDock or HostsDock.exe to run. 这里是已经打包好的应用，直接下载压缩包并解压，执行文件夹中的 HostsDock 或 HostsDock.exe 即可运行。  
 Local 本地下载：https://github.com/eshengsky/HostsDock/releases  
-Baidu 百度网盘：http://pan.baidu.com/s/1slCFTSx  
+Baidu 百度网盘：http://pan.baidu.com/s/1hrQVrpy  
 
 ## Quick start 快速开始
 Firstly be sure you have installed [Node.js](https://nodejs.org/en/download/) and [NPM](https://www.npmjs.com/) successfully. 请先确保已成功安装 [Node.js](https://nodejs.org/en/download/) 和 [NPM](https://www.npmjs.com/)。  
