@@ -1,7 +1,7 @@
 {
   "name": "hostsdock",
   "productName": "HostsDock",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Store, manage and switch your hosts easily.",
   "private": true,
   "main": "main.js",
