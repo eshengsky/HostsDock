@@ -27,10 +27,11 @@
   },
   "homepage": "https://github.com/eshengsky/HostsDock#readme",
   "devDependencies": {
-    "electron-prebuilt": "^1.2.0"
+    "electron-prebuilt": "^1.2.2"
   },
   "dependencies": {
     "async": "^2.0.0-rc.5",
+    "i18n": "^0.8.2",
     "moment": "^2.13.0",
     "node-notifier": "^4.6.0",
     "request": "^2.72.0",

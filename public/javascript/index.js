@@ -8,30 +8,53 @@ const moment = require('moment');
 const shortid = require('shortid');
 const request = require('request');
 const async = require('async');
+const i18n = require('i18n');
+const localeArray = ['en-US', 'zh-CN', 'zh-TW'];
+i18n.configure({
+    locales: localeArray,
+    directory: path.join(__dirname, '../../locales'),
+    objectNotation: true
+});
+var locale;
+try {
+    var data = fs.readFileSync(path.resolve(app.getPath('userData'), 'config.json'), 'utf8');
+    data = JSON.parse(data);
+    locale = data.locale;
+} catch (e) {
+
+}
+if (!locale) {
+    locale = app.getLocale();
+}
+if (localeArray.indexOf(locale) === -1) {
+    locale = 'en-US';
+}
+i18n.setLocale(locale);
 
 class HostsDock {
     constructor() {
-        this.hostsDockDir = path.resolve(app.getPath('userData'), 'LocalHosts'); // 用来存放本地方案的路径
-        this.configFile = path.resolve(app.getPath('userData'), 'config.json'); // 用户配置文件路径
+        this.hostsDockDir = path.resolve(app.getPath('userData'), 'LocalHosts'); // local hosts folder
+        this.configFile = path.resolve(app.getPath('userData'), 'config.json'); // user config path
         this.platForm = process.platform;
-        this.sysHostsFile = this.platForm === 'win32' ? 'c:\\windows\\system32\\drivers\\etc\\hosts' : '/etc/hosts'; // 系统hosts文件路径
+        this.sysHostsFile = this.platForm === 'win32' ? 'c:\\windows\\system32\\drivers\\etc\\hosts' : '/etc/hosts'; // system hosts path
         this.originalHostsId = 'orignial';
-        this.originalHostsName = '初始hosts';
+        this.originalHostsName = i18n.__('renderer.original_hosts');
         this.backupHostsId = 'backup';
-        this.backupHostsName = '系统hosts备份';
+        this.backupHostsName = i18n.__('renderer.backup_hosts');
         this.systemHostsId = 'system';
         this.loadingMin = 500;
         this.urlPattern = /((\w+:\/\/|\\\\)[-a-zA-Z0-9:@;?&=\/%\+\.\*!'\(\),\$_\{\}\^~\[\]`#|]+)/;
         this.editor = ace.edit("hosts-content");
-        this.buffer = null; // 内容更改缓存，赋值时机：editor内容发生了人为更改，清空时机：监听器触发时清空并将内容写入文件
-        this.bufferTimeInterval = 1000; // 批量提交更改的间隔时间
+        this.buffer = null; // the cache for content change, set:editor changed manually, get:listener triggers
+        this.bufferTimeInterval = 1000; // interval time to batch write
     }
 
     /**
-     * 初始化
+     * initial
      */
     init() {
         this.detectFiles();
+        this.initUiText();
         this.loadEditor();
         this.watchSysHosts();
         this.bindEvents();
@@ -39,22 +62,22 @@ class HostsDock {
     }
 
     /**
-     * 检测必要的文件
+     * detect necessary files
      */
     detectFiles() {
         async.map([this.hostsDockDir, this.configFile], fs.stat, (err, results)=> {
-            // 认为是首次启动程序
+            // first run app
             if (err || !results[0].isDirectory() || !results[1].isFile()) {
-                // 创建LocalHosts目录
+                // create LocalHosts folder
                 fs.mkdir(this.hostsDockDir, (err)=> {
                     if (err && err.code !== 'EEXIST') {
                         swal({
-                            title: '创建本地hosts目录失败',
+                            title: i18n.__('renderer.create_local_dir_err'),
                             text: err.message,
                             type: 'error'
                         });
                     } else {
-                        // 创建一个hosts文件，作为空白hosts
+                        // create an original file
                         var now = moment(Date.now()).format('YYYY/MM/DD HH:mm:ss');
                         this.writeHostsContent(this.originalHostsId, `# HostsDock - Created at ${now}
 #region Localhost
@@ -63,17 +86,17 @@ class HostsDock {
 #endregion`, (err)=> {
                             if (err) {
                                 swal({
-                                    title: `创建${this.originalHostsName}文件失败`,
+                                    title: i18n.__('renderer.create_file_err', this.originalHostsName),
                                     text: err.message,
                                     type: 'error'
                                 });
                             }
                         });
-                        // 创建系统hosts备份文件，从系统hosts复制内容
+                        // create a system backup file, copy content from system hosts
                         this.copyHostsContent(this.systemHostsId, this.backupHostsId, (err)=> {
                             if (err) {
                                 swal({
-                                    title: `创建${this.backupHostsName}文件失败`,
+                                    title: i18n.__('renderer.create_file_err', this.backupHostsName),
                                     text: err.message,
                                     type: 'error'
                                 });
@@ -83,6 +106,7 @@ class HostsDock {
                 });
                 let config = {
                     appliedId: '',
+                    locale: '',
                     fontSize: '14',
                     localHosts: [{
                         id: this.originalHostsId,
@@ -95,29 +119,29 @@ class HostsDock {
                     }],
                     remoteHosts: []
                 };
-                // 创建配置文件
+                // create user config file
                 fs.writeFile(this.configFile, JSON.stringify(config, null, 4), (err) => {
                     if (err) {
                         swal({
-                            title: '创建用户配置文件失败',
+                            title: i18n.__('renderer.create_config_err'),
                             text: err.message,
                             type: 'error'
                         });
                     }
                 });
-                // 为提高执行效率，传入true后该方法不依赖必须的文件
+                // In order to improve the execution efficiency, the method does not rely on the necessary files when passed true
                 this.loadHostsList(true);
             } else {
                 this.loadHostsList();
             }
         });
 
-        // 检测系统hosts文件的读写权限
+        // detect system hosts r/w permissions
         fs.access(this.sysHostsFile, fs.R_OK | fs.W_OK, (err)=> {
             if (err) {
                 swal({
-                    title: '没有系统hosts文件的读写权限',
-                    text: '请尝试使用管理员或超级用户身份启动应用！',
+                    title: i18n.__('renderer.no_permission'),
+                    text: i18n.__('renderer.run_with_admin'),
                     type: 'error'
                 });
             }
@@ -125,18 +149,18 @@ class HostsDock {
     }
 
     /**
-     * 加载hosts列表
+     * load hosts list
      */
     loadHostsList(isFirst = false) {
         if (isFirst) {
-            $('.nav-local').append(`<li><a class='lk-hosts' data-hosts-id='${this.originalHostsId}'><i class='applied fa fa-check' title='已应用'></i><i class='fa fa-file-text-o'></i> <span>${this.originalHostsName}</span><i class='loading fa fa-spinner fa-spin' title='加载中'></i></a></li>` +
-                `<li><a class='lk-hosts' data-hosts-id='${this.backupHostsId}'><i class='applied fa fa-check' title='已应用'></i><i class='fa fa-file-text-o'></i> <span>${this.backupHostsName}</span><i class='loading fa fa-spinner fa-spin' title='加载中'></i></a></li>`);
+            $('.nav-local').append(`<li><a class='lk-hosts' data-hosts-id='${this.originalHostsId}'><i class='applied fa fa-check' title='${i18n.__('renderer.applied')}'></i><i class='fa fa-file-text-o'></i> <span>${this.originalHostsName}</span><i class='loading fa fa-spinner fa-spin' title='${i18n.__('renderer.loading')}'></i></a></li>` +
+                `<li><a class='lk-hosts' data-hosts-id='${this.backupHostsId}'><i class='applied fa fa-check' title='${i18n.__('renderer.applied')}'></i><i class='fa fa-file-text-o'></i> <span>${this.backupHostsName}</span><i class='loading fa fa-spinner fa-spin' title='${i18n.__('renderer.loading')}'></i></a></li>`);
             $(`.lk-hosts[data-hosts-id=${this.systemHostsId}]`).click();
         } else {
             fs.readFile(this.configFile, 'utf8', (err, data) => {
                 if (err) {
                     swal({
-                        title: '加载hosts方案失败',
+                        title: i18n.__('renderer.load_list_err'),
                         text: err.message,
                         type: 'error'
                     });
@@ -149,16 +173,16 @@ class HostsDock {
                     let allIdArr = [];
                     localHosts.forEach((item)=> {
                         allIdArr.push(item.id);
-                        localHtml += `<li><a class='lk-hosts' data-hosts-id='${item.id}'><i class='applied fa fa-check' style='${appliedId === item.id ? "display:inline-block" : ""}' title='已应用'></i><i class='fa fa-file-text-o'></i> <span>${item.name}</span><i class='loading fa fa-spinner fa-spin' title='加载中'></i></a></li>`;
+                        localHtml += `<li><a class='lk-hosts' data-hosts-id='${item.id}'><i class='applied fa fa-check' style='${appliedId === item.id ? "display:inline-block" : ""}' title='${i18n.__('renderer.applied')}'></i><i class='fa fa-file-text-o'></i> <span>${item.name}</span><i class='loading fa fa-spinner fa-spin' title='${i18n.__('renderer.loading')}'></i></a></li>`;
                     });
                     $('.nav-local').append(localHtml);
                     let remoteHtml = '';
                     remoteHosts.forEach((item)=> {
                         allIdArr.push(item.id);
-                        remoteHtml += `<li><a class='lk-hosts' data-hosts-id='${item.id}' data-hosts-url='${item.url}'><i class='applied fa fa-check' style='${appliedId === item.id ? "display:inline-block" : ""}' title='已应用'></i><i class='fa fa-globe'></i> <span>${item.name}</span><i class='loading fa fa-spinner fa-spin' title='加载中'></i></a></li>`;
+                        remoteHtml += `<li><a class='lk-hosts' data-hosts-id='${item.id}' data-hosts-url='${item.url}'><i class='applied fa fa-check' style='${appliedId === item.id ? "display:inline-block" : ""}' title='${i18n.__('renderer.applied')}'></i><i class='fa fa-globe'></i> <span>${item.name}</span><i class='loading fa fa-spinner fa-spin' title='${i18n.__('renderer.loading')}'></i></a></li>`;
                     });
                     $('.nav-remote').append(remoteHtml);
-                    // 上次退出程序时应用了有效的hosts方案
+                    // already applied some scheme when last exit
                     if (appliedId && allIdArr.indexOf(appliedId) >= 0) {
                         $(`.lk-hosts[data-hosts-id=${appliedId}]`).click();
                     } else {
@@ -171,7 +195,37 @@ class HostsDock {
     }
 
     /**
-     * 初始化Editor
+     * init UI text
+     */
+    initUiText(){
+        $('.title-sys span').text(i18n.__('renderer.system'));
+        $('.title-sys p').text(i18n.__('renderer.system_desc'));
+        $('[data-hosts-id=system] span').text(i18n.__('renderer.system_hosts'));
+        $('[data-hosts-id=system] i:eq(1)').attr('title',i18n.__('renderer.loading'));
+        $('.time-li').attr('title', i18n.__('renderer.update_time'));
+        $('#update-at').text(i18n.__('renderer.update_at'));
+        $('.title-local span').text(i18n.__('renderer.local'));
+        $('.title-local p').text(i18n.__('renderer.local_desc'));
+        $('.title-remote span').text(i18n.__('renderer.remote'));
+        $('.title-remote p').text(i18n.__('renderer.remote_desc'));
+
+        $('#btnNew').attr('title', i18n.__('renderer.btnNew'));
+        $('#btnRefresh').attr('title', i18n.__('renderer.btnRefresh'));
+        $('#btnEdit').attr('title', i18n.__('renderer.btnEdit'));
+        $('#btnDelete').attr('title', i18n.__('renderer.btnDelete'));
+        $('#btnApply').attr('title', i18n.__('renderer.btnApply'));
+
+        $('#btnUndo').attr('title', i18n.__('renderer.btnUndo') + '(Ctrl+Z)');
+        $('#btnRedo').attr('title', i18n.__('renderer.btnRedo') + '(Ctrl+Shift+Z)');
+        $('#btnCopy').attr('title', i18n.__('renderer.btnCopy') + '(Ctrl+C)');
+        $('#btnCut').attr('title', i18n.__('renderer.btnCut') + '(Ctrl+X)');
+        $('#btnPaste').attr('title', i18n.__('renderer.btnPaste') + '(Ctrl+V)');
+        $('#btnSearch').attr('title', i18n.__('renderer.btnSearch') + '(Ctrl+F)');
+        $('#btnReplace').attr('title', i18n.__('renderer.btnReplace') + '(Ctrl+H)');
+    }
+
+    /**
+     * init Editor
      */
     loadEditor() {
         this.editor.setTheme("ace/theme/hosts");
@@ -184,7 +238,7 @@ class HostsDock {
     }
 
     /**
-     * 监听系统hosts的修改
+     * listen for system hosts
      */
     watchSysHosts() {
         fs.stat(this.sysHostsFile, (err, stats)=> {
@@ -200,19 +254,19 @@ class HostsDock {
     }
 
     /**
-     * 绑定页面事件
+     * bind elements event
      */
     bindEvents() {
-        // 导航折叠事件绑定
+        // nav toggle
         $('.toggle-title').on('click', (e) => {
             var $this = $(e.currentTarget);
             $this.parent().toggleClass('is-open');
         });
 
-        // 导航单击事件绑定
+        // nav click
         $('.nav-items').on('click', '.lk-hosts', (e) => this.navClickHandler(e));
 
-        // 导航双击事件绑定
+        // nav double click
         $('.nav-items').on('dblclick', '.lk-hosts', (e) => {
             var $this = $(e.currentTarget),
                 id = $this.attr('data-hosts-id'),
@@ -221,7 +275,7 @@ class HostsDock {
             this.applyHosts(id, name, url, (err, msg) => {
                 if (err) {
                     swal({
-                        title: '操作失败',
+                        title: i18n.__('renderer.operation_failed'),
                         text: err.message,
                         type: 'error'
                     });
@@ -233,12 +287,12 @@ class HostsDock {
             })
         });
 
-        // 新增按钮单击事件绑定
+        // new scheme click
         $('#btnNew').on('click', () => {
             this.showModalNew();
         });
 
-        // 编辑按钮单击事件绑定
+        // edit scheme click
         $('#btnEdit').on('click', () => {
             var $currentActiveBtn = $('.nav-items li.active .lk-hosts');
             if ($currentActiveBtn.length > 0) {
@@ -249,18 +303,18 @@ class HostsDock {
             }
         });
 
-        // 刷新按钮单击事件绑定
+        // refresh click
         $('#btnRefresh').on('click', (e) => this.refreshClickHandler(e));
 
-        // 删除按钮单击事件绑定
+        // delete click
         $('#btnDelete').on('click', () => this.deleteClickHandler());
 
-        // 应用按钮单击事件绑定
+        // apply click
         $('#btnApply').on('click', (e) => this.applyClickHandler(e));
 
-        // 撤销按钮单击事件绑定
+        // undo click
         $('#btnUndo').on('click', ()=> {
-            // 手动添加一个command.name属性，目的是当触发更改事件时，判定为人为修改
+            // add command.name, the purpose is to determine artificially modified when a change event is triggered
             this.editor.curOp = {
                 command: {name: 'undoClick'}
             };
@@ -268,9 +322,9 @@ class HostsDock {
             this.editor.curOp = null;
         });
 
-        // 重做按钮单击事件绑定
+        // redo click
         $('#btnRedo').on('click', ()=> {
-            // 手动添加一个command.name属性，目的是当触发更改事件时，判定为人为修改
+            // add command.name, the purpose is to determine artificially modified when a change event is triggered
             this.editor.curOp = {
                 command: {name: 'redoClick'}
             };
@@ -278,32 +332,32 @@ class HostsDock {
             this.editor.curOp = null;
         });
 
-        // 复制按钮单击事件绑定
+        // copy click
         $('#btnCopy').on('click', ()=> {
             this.editor.focus();
             document.execCommand('copy');
         });
 
-        // 剪切按钮单击事件绑定
+        // cut click
         $('#btnCut').on('click', ()=> {
             this.editor.focus();
             document.execCommand('cut');
         });
 
-        // 粘贴按钮单击事件绑定
+        // paste click
         $('#btnPaste').on('click', ()=> {
             this.editor.focus();
             document.execCommand('paste')
         });
 
-        // 查找按钮单击事件绑定
+        // search click
         $('#btnSearch').on('click', ()=> {
             ace.require(["ace/ext/searchbox"], (obj) => {
                 new obj.Search(this.editor);
             });
         });
 
-        // 替换按钮单击事件绑定
+        // replace click
         $('#btnReplace').on('click', ()=> {
             ace.require(["ace/ext/searchbox"], (obj) => {
                 new obj.Search(this.editor, true);
@@ -312,16 +366,16 @@ class HostsDock {
     }
 
     /**
-     * 定时器，监听缓存中是否有数据，有的话就写入文件
+     * timer, listen for cache, write to file if cache is not null
      */
     contentChange() {
         setInterval(()=> {
             if (this.buffer !== null) {
                 let id = this.buffer.id;
                 let content = this.buffer.content;
-                // 重置缓存为null
+                // reset cache to null
                 this.buffer = null;
-                // 将间隔时间内的更改写入文件
+                // write changes to file during the interval
                 this.writeHostsContent(id, content, (err)=> {
                 })
             }
@@ -329,10 +383,10 @@ class HostsDock {
     }
 
     /**
-     * 读取hosts文件
-     * @param id 文件id
-     * @param [url] 远程url
-     * @param callback 回调函数
+     * read hosts file
+     * @param id file id
+     * @param [url] remote url
+     * @param callback callback function
      */
     readHostsContent(id, url, callback) {
         if (typeof url === 'function') {
@@ -340,7 +394,7 @@ class HostsDock {
             url = undefined;
         }
         var data = '';
-        // 本地文件
+        // local file
         if (!url) {
             let filePath;
             if (id === this.systemHostsId) {
@@ -361,7 +415,7 @@ class HostsDock {
                 callback(err);
             });
         } else {
-            // 本地文件
+            // local file
             if (url.startsWith('\\\\')) {
                 let rs = fs.createReadStream(url, 'utf8');
                 rs.on('data', (chunk)=> {
@@ -376,7 +430,7 @@ class HostsDock {
                     callback(err);
                 });
             } else {
-                // 远程文件
+                // remote file
                 request(url, (err, response, body) => {
                     if (err) {
                         callback(err);
@@ -389,10 +443,10 @@ class HostsDock {
     }
 
     /**
-     * 写入hosts文件
-     * @param id 文件id
-     * @param content 文本内容
-     * @param callback 回调函数
+     * write hosts file
+     * @param id file id
+     * @param content file data
+     * @param callback callback function
      */
     writeHostsContent(id, content, callback) {
         var filePath;
@@ -411,10 +465,10 @@ class HostsDock {
     }
 
     /**
-     * 复制hosts内容
-     * @param fromId 源文件Id
-     * @param toId 目标文件Id
-     * @param callback 回调函数
+     * copy hosts content
+     * @param fromId source file id
+     * @param toId dest file id
+     * @param callback callback function
      */
     copyHostsContent(fromId, toId, callback) {
         var pathFrom, pathTo;
@@ -443,8 +497,8 @@ class HostsDock {
     }
 
     /**
-     * 生成唯一标识
-     * @returns 唯一标识
+     * generate unique id
+     * @returns unique id
      */
     static getUid() {
         shortid.characters('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ$@');
@@ -452,7 +506,7 @@ class HostsDock {
     }
 
     /**
-     * 刷新DNS
+     * flush DNS
      */
     flushDns() {
         if (this.platForm === 'win32') {
@@ -468,7 +522,7 @@ class HostsDock {
     }
 
     /**
-     * 重置按钮的显示隐藏
+     * reset show/hidden for buttons
      * @param id
      */
     resetBtnState(id) {
@@ -484,23 +538,23 @@ class HostsDock {
     }
 
     /**
-     * 新增方案
+     * new scheme
      */
     showModalNew() {
         var errShowing = false,
             that = this;
         swal.withForm({
-            title: '新增方案',
-            text: '若远程hosts文件的地址留空，则是本地方案',
+            title: i18n.__('renderer.new_scheme'),
+            text: i18n.__('renderer.new_scheme_desc'),
             showCancelButton: true,
             confirmButtonColor: '#DD6B55',
-            confirmButtonText: '提交方案',
-            cancelButtonText: '取消',
+            confirmButtonText: i18n.__('renderer.new_scheme_submit'),
+            cancelButtonText: i18n.__('renderer.cancel'),
             closeOnConfirm: false,
             animation: 'slide-from-top',
             formFields: [
-                {id: 'txtName', placeholder: '方案名称'},
-                {id: 'txtUrl', placeholder: '远程hosts文件的地址'}
+                {id: 'txtName', placeholder: i18n.__('renderer.scheme_name')},
+                {id: 'txtUrl', placeholder: i18n.__('renderer.scheme_address')}
             ]
         }, function (isConfirm) {
             var $errEl = $('.sa-error-container');
@@ -510,7 +564,7 @@ class HostsDock {
                 if (!name) {
                     if (!errShowing) {
                         errShowing = true;
-                        $errEl.find('p').text('方案名称不能为空');
+                        $errEl.find('p').text(i18n.__('renderer.scheme_name_empty'));
                         $errEl.addClass('show');
                         setTimeout(()=> {
                             $errEl.removeClass('show');
@@ -522,7 +576,7 @@ class HostsDock {
                 if (url && !that.urlPattern.test(url)) {
                     if (!errShowing) {
                         errShowing = true;
-                        $errEl.find('p').text('远程文件的地址格式不正确');
+                        $errEl.find('p').text(i18n.__('renderer.scheme_address_err'));
                         $errEl.addClass('show');
                         setTimeout(()=> {
                             $errEl.removeClass('show');
@@ -535,7 +589,7 @@ class HostsDock {
                     if (err) {
                         $('.swal-form').remove();
                         swal({
-                            title: '提交失败',
+                            title: i18n.__('renderer.submit_failed'),
                             text: err.message,
                             type: 'error'
                         });
@@ -558,7 +612,7 @@ class HostsDock {
                         if (isExists) {
                             if (!errShowing) {
                                 errShowing = true;
-                                $errEl.find('p').text('方案名称已存在');
+                                $errEl.find('p').text(i18n.__('renderer.scheme_name_exists'));
                                 $errEl.addClass('show');
                                 setTimeout(()=> {
                                     $errEl.removeClass('show');
@@ -573,7 +627,7 @@ class HostsDock {
                                 that.writeHostsContent(id, `# HostsDock - Created at ${now}\r\n`, (err)=> {
                                     if (err) {
                                         swal({
-                                            title: '提交失败',
+                                            title: i18n.__('renderer.submit_failed'),
                                             text: err.message,
                                             type: 'error'
                                         });
@@ -587,18 +641,18 @@ class HostsDock {
                                         fs.writeFile(that.configFile, JSON.stringify(config, null, 4), 'utf8', (err)=> {
                                             if (err) {
                                                 swal({
-                                                    title: '提交失败',
+                                                    title: i18n.__('renderer.submit_failed'),
                                                     text: err.message,
                                                     type: 'error'
                                                 });
                                                 $('.swal-form').remove();
                                             } else {
-                                                var $li = $(`<li><a class='lk-hosts' data-hosts-id='${id}'><i class='applied fa fa-check' title='已应用'></i><i class='fa fa-file-text-o'></i> <span>${name}</span><i class='loading fa fa-spinner fa-spin' title='加载中'></i></a></li>`);
+                                                var $li = $(`<li><a class='lk-hosts' data-hosts-id='${id}'><i class='applied fa fa-check' title='${i18n.__('renderer.applied')}'></i><i class='fa fa-file-text-o'></i> <span>${name}</span><i class='loading fa fa-spinner fa-spin' title='${i18n.__('renderer.loading')}'></i></a></li>`);
                                                 $('.nav-local').append($li);
                                                 $li.children('.lk-hosts').click();
                                                 swal({
-                                                    title: '提交成功',
-                                                    text: `已成功创建本地方案：${name}`,
+                                                    title: i18n.__('renderer.submit_successfully'),
+                                                    text: i18n.__('renderer.create_local_successfully', name),
                                                     type: 'success',
                                                     showConfirmButton: false,
                                                     timer: 1500
@@ -617,18 +671,18 @@ class HostsDock {
                                 fs.writeFile(that.configFile, JSON.stringify(config, null, 4), 'utf8', (err)=> {
                                     if (err) {
                                         swal({
-                                            title: '提交失败',
+                                            title: i18n.__('renderer.submit_failed'),
                                             text: err.message,
                                             type: 'error'
                                         });
                                         $('.swal-form').remove();
                                     } else {
-                                        var $li = $(`<li><a class='lk-hosts' data-hosts-id='${id}' data-hosts-url='${url}'><i class='applied fa fa-check' title='已应用'></i><i class='fa fa-globe'></i> <span>${name}</span><i class='loading fa fa-spinner fa-spin' title='加载中'></i></a></li>`);
+                                        var $li = $(`<li><a class='lk-hosts' data-hosts-id='${id}' data-hosts-url='${url}'><i class='applied fa fa-check' title='${i18n.__('renderer.applied')}'></i><i class='fa fa-globe'></i> <span>${name}</span><i class='loading fa fa-spinner fa-spin' title='${i18n.__('renderer.loading')}'></i></a></li>`);
                                         $('.nav-remote').append($li);
                                         $li.children('.lk-hosts').click();
                                         swal({
-                                            title: '提交成功',
-                                            text: `已成功创建远程方案：${name}`,
+                                            title: i18n.__('renderer.submit_successfully'),
+                                            text: i18n.__('renderer.create_remote_successfully', name),
                                             type: 'success',
                                             showConfirmButton: false,
                                             timer: 1500
@@ -647,25 +701,25 @@ class HostsDock {
     }
 
     /**
-     * 修改方案
-     * @param id 方案id
-     * @param oldName 当前名称
-     * @param oldUrl 当前url
+     * edit scheme
+     * @param id scheme id
+     * @param oldName current name
+     * @param oldUrl current url
      */
     showModalEdit(id, oldName, oldUrl) {
         var errShowing = false,
             that = this;
-        var forms = [{id: 'txtName', placeholder: '方案名称', value: oldName}];
+        var forms = [{id: 'txtName', placeholder: i18n.__('renderer.scheme_name'), value: oldName}];
         if (oldUrl) {
-            forms.push({id: 'txtUrl', placeholder: '远程hosts文件的地址', value: oldUrl});
+            forms.push({id: 'txtUrl', placeholder: i18n.__('renderer.scheme_address'), value: oldUrl});
         }
         swal.withForm({
-            title: '编辑方案',
-            text: `当前编辑的是${oldUrl ? '远程' : '本地'}方案`,
+            title: i18n.__('renderer.edit_scheme'),
+            text: oldUrl ? i18n.__('renderer.edit_scheme_remote_desc') : i18n.__('renderer.edit_scheme_local_desc'),
             showCancelButton: true,
             confirmButtonColor: '#DD6B55',
-            confirmButtonText: '保存方案',
-            cancelButtonText: '取消',
+            confirmButtonText: i18n.__('renderer.edit_scheme_save'),
+            cancelButtonText: i18n.__('renderer.cancel'),
             closeOnConfirm: false,
             animation: 'slide-from-top',
             formFields: forms
@@ -680,7 +734,7 @@ class HostsDock {
                 if (!name) {
                     if (!errShowing) {
                         errShowing = true;
-                        $errEl.find('p').text('方案名称不能为空');
+                        $errEl.find('p').text(i18n.__('renderer.scheme_name_empty'));
                         $errEl.addClass('show');
                         setTimeout(()=> {
                             $errEl.removeClass('show');
@@ -692,7 +746,7 @@ class HostsDock {
                 if (oldUrl && !url) {
                     if (!errShowing) {
                         errShowing = true;
-                        $errEl.find('p').text('远程地址不能为空');
+                        $errEl.find('p').text(i18n.__('renderer.scheme_address_empty'));
                         $errEl.addClass('show');
                         setTimeout(()=> {
                             $errEl.removeClass('show');
@@ -704,7 +758,7 @@ class HostsDock {
                 if (url && !urlPattern.test(url)) {
                     if (!errShowing) {
                         errShowing = true;
-                        $errEl.find('p').text('远程文件的地址格式不正确');
+                        $errEl.find('p').text(i18n.__('renderer.scheme_address_err'));
                         $errEl.addClass('show');
                         setTimeout(()=> {
                             $errEl.removeClass('show');
@@ -718,7 +772,7 @@ class HostsDock {
                         if (err) {
                             $('.swal-form').remove();
                             swal({
-                                title: '提交失败',
+                                title: i18n.__('renderer.submit_failed'),
                                 text: err.message,
                                 type: 'error'
                             });
@@ -741,7 +795,7 @@ class HostsDock {
                             if (isExists) {
                                 if (!errShowing) {
                                     errShowing = true;
-                                    $errEl.find('p').text('方案名称已存在');
+                                    $errEl.find('p').text(i18n.__('renderer.scheme_name_exists'));
                                     $errEl.addClass('show');
                                     setTimeout(()=> {
                                         $errEl.removeClass('show');
@@ -771,7 +825,7 @@ class HostsDock {
                                     fs.writeFile(that.configFile, JSON.stringify(config, null, 4), 'utf8', (err)=> {
                                         if (err) {
                                             swal({
-                                                title: '提交失败',
+                                                title: i18n.__('renderer.submit_failed'),
                                                 text: err.message,
                                                 type: 'error'
                                             });
@@ -783,8 +837,8 @@ class HostsDock {
                                                 $btn.attr('data-hosts-url', url);
                                             }
                                             swal({
-                                                title: '保存成功',
-                                                text: `已成功保存方案的更改`,
+                                                title: i18n.__('renderer.save_successfully'),
+                                                text: i18n.__('renderer.save_successfully_desc'),
                                                 type: 'success',
                                                 showConfirmButton: false,
                                                 timer: 1500
@@ -794,7 +848,7 @@ class HostsDock {
                                     })
                                 } else {
                                     swal({
-                                        title: '提交失败',
+                                        title: i18n.__('renderer.submit_failed'),
                                         text: err.message,
                                         type: 'error'
                                     });
@@ -804,11 +858,11 @@ class HostsDock {
                         }
                     })
                 } else {
-                    // 实际未作修改
+                    // actually not modified
                     if ((oldUrl && url === oldUrl) || !oldUrl) {
                         swal({
-                            title: '保存成功',
-                            text: `已成功保存方案的更改`,
+                            title: i18n.__('renderer.save_successfully'),
+                            text: i18n.__('renderer.save_successfully_desc'),
                             type: 'success',
                             showConfirmButton: false,
                             timer: 1500
@@ -819,7 +873,7 @@ class HostsDock {
                             if (err) {
                                 $('.swal-form').remove();
                                 swal({
-                                    title: '提交失败',
+                                    title: i18n.__('renderer.submit_failed'),
                                     text: err.message,
                                     type: 'error'
                                 });
@@ -837,7 +891,7 @@ class HostsDock {
                                     fs.writeFile(that.configFile, JSON.stringify(config, null, 4), 'utf8', (err)=> {
                                         if (err) {
                                             swal({
-                                                title: '提交失败',
+                                                title: i18n.__('renderer.submit_failed'),
                                                 text: err.message,
                                                 type: 'error'
                                             });
@@ -846,8 +900,8 @@ class HostsDock {
                                             let $btn = $('.nav-items a[data-hosts-id=' + id + ']');
                                             $btn.attr('data-hosts-url', url).find('span').text(name);
                                             swal({
-                                                title: '保存成功',
-                                                text: `已成功保存方案的更改`,
+                                                title: i18n.__('renderer.save_successfully'),
+                                                text: i18n.__('renderer.save_successfully_desc'),
                                                 type: 'success',
                                                 showConfirmButton: false,
                                                 timer: 1500
@@ -857,7 +911,7 @@ class HostsDock {
                                     })
                                 } else {
                                     swal({
-                                        title: '提交失败',
+                                        title: i18n.__('renderer.submit_failed'),
                                         text: err.message,
                                         type: 'error'
                                     });
@@ -875,17 +929,17 @@ class HostsDock {
     }
 
     /**
-     * 编辑器内容更改的处理函数
+     * content change handler
      */
     changeHandler() {
-        // 如果command有name属性，则说明是用户操作导致的内容更改，而非程序操作
+        // if has command.name, indicate that the content changes are caused by the user action, instead of program
         if (this.editor.curOp && this.editor.curOp.command.name) {
             var id = $('.nav-items li.active .lk-hosts').attr('data-hosts-id');
             var content = this.editor.getValue();
             // 先将当前内容放入缓存，到时批量写入
             this.buffer = {id: id, content: content};
         }
-        // undo/redo是在修改完成之后才会处理，所以这里必须加到异步队列中
+        // undo/redo will handle after changed, so must add to async queue
         setImmediate(()=> {
             var um = this.editor.session.getUndoManager();
             if (um.hasUndo()) {
@@ -902,8 +956,8 @@ class HostsDock {
     }
 
     /**
-     * 导航单击的处理函数
-     * @param e Event对象
+     * nav click handler
+     * @param e event object
      */
     navClickHandler(e) {
         var $this = $(e.currentTarget),
@@ -925,11 +979,11 @@ class HostsDock {
             this.resetBtnState(id);
             if (!url) {
                 this.readHostsContent(id, (err, data) => {
-                    // TODO:当改变导航后不再执行回调
+                    // TODO:no longer perform callback when navigation changed
                     if ($('.nav-items li.active .lk-hosts').attr('data-hosts-id') === id) {
                         if (err) {
                             swal({
-                                title: '读取hosts文件失败',
+                                title: i18n.__('renderer.load_hosts_failed'),
                                 text: err.message,
                                 type: 'error'
                             });
@@ -938,7 +992,7 @@ class HostsDock {
                             this.editor.session.setValue(data, -1);
                         }
                         $('#btnRefresh').removeAttr('disabled');
-                        // 清除undo/redo列表
+                        // clear undo/redo list
                         this.editor.session.getUndoManager().reset();
                         var timeEnd = Date.now();
                         if (timeEnd - timeStart > this.loadingMin) {
@@ -954,11 +1008,11 @@ class HostsDock {
             } else {
                 this.editor.setReadOnly(true);
                 this.readHostsContent(id, url, (err, data)=> {
-                    // TODO:当改变导航后不再执行回调
+                    // TODO:no longer perform callback when navigation changed
                     if ($('.nav-items li.active .lk-hosts').attr('data-hosts-id') === id) {
                         if (err) {
                             swal({
-                                title: '远程文件读取失败',
+                                title: i18n.__('renderer.get_remote_failed'),
                                 text: err.message,
                                 type: 'error'
                             });
@@ -966,7 +1020,7 @@ class HostsDock {
                             this.editor.session.setValue(data, -1);
                         }
                         $('#btnRefresh').removeAttr('disabled');
-                        // 清除undo/redo列表
+                        // clear undo/redo list
                         this.editor.session.getUndoManager().reset();
                         var timeEnd = Date.now();
                         if (timeEnd - timeStart > this.loadingMin) {
@@ -984,14 +1038,14 @@ class HostsDock {
     }
 
     /**
-     * 应用hosts方案
-     * @param id 方案id
-     * @param name 方案名称
-     * @param url 远程地址
-     * @param callback 回调函数
+     * apply hosts
+     * @param id scheme id
+     * @param name scheme name
+     * @param url remote address
+     * @param callback callback function
      */
     applyHosts(id, name, url, callback) {
-        // 取消系统hosts方案的双击作用
+        // just non-system hosts
         if (id !== this.systemHostsId) {
             if (url) {
                 this.readHostsContent(id, url, (err, data)=> {
@@ -1000,8 +1054,8 @@ class HostsDock {
                     } else {
                         var ws = fs.createWriteStream(this.sysHostsFile);
                         ws.write(data, 'utf8', ()=> {
-                            callback(null, `已成功应用远程方案：${name}`);
-                            // 将应用的方案id写入config
+                            callback(null, i18n.__('renderer.applied_remote_successfully', name));
+                            // write applied scheme id to config
                             fs.readFile(this.configFile, 'utf8', (err, data)=> {
                                 if (!err) {
                                     let config = JSON.parse(data);
@@ -1013,8 +1067,8 @@ class HostsDock {
                             this.flushDns();
                         });
                         ws.on('error', (err)=> {
-                            if(err.message.indexOf('operation not permitted') >= 0){
-                                err = new Error('请尝试使用管理员或超级用户身份启动应用！');
+                            if (err.message.indexOf('operation not permitted') >= 0) {
+                                err = new Error(i18n.__('renderer.run_with_admin'));
                             }
                             callback(err);
                         });
@@ -1023,13 +1077,13 @@ class HostsDock {
             } else {
                 this.copyHostsContent(id, this.systemHostsId, (err)=> {
                     if (err) {
-                        if(err.message.indexOf('operation not permitted') >= 0){
-                            err = new Error('请尝试使用管理员或超级用户身份启动应用！');
+                        if (err.message.indexOf('operation not permitted') >= 0) {
+                            err = new Error(i18n.__('renderer.run_with_admin'));
                         }
                         callback(err);
                     } else {
-                        callback(null, `已成功应用本地方案：${name}`);
-                        // 将应用的方案id写入config
+                        callback(null, i18n.__('renderer.applied_local_successfully', name));
+                        // write applied scheme id to config
                         fs.readFile(this.configFile, 'utf8', (err, data)=> {
                             if (!err) {
                                 let config = JSON.parse(data);
@@ -1047,7 +1101,7 @@ class HostsDock {
     }
 
     /**
-     * 应用方案单击处理函数
+     * apply click handler
      * @param e
      */
     applyClickHandler(e) {
@@ -1063,7 +1117,7 @@ class HostsDock {
             this.applyHosts(id, name, url, (err, msg) => {
                 if (err) {
                     swal({
-                        title: '操作失败',
+                        title: i18n.__('renderer.operation_failed'),
                         text: err.message,
                         type: 'error'
                     });
@@ -1079,7 +1133,7 @@ class HostsDock {
     }
 
     /**
-     * 删除方案的处理函数
+     * delete scheme handler
      */
     deleteClickHandler() {
         var $currentActiveBtn = $('.nav-items li.active .lk-hosts');
@@ -1088,19 +1142,19 @@ class HostsDock {
             var url = $currentActiveBtn.attr('data-hosts-url');
             var name = $currentActiveBtn.find('span').text();
             swal({
-                    title: '删除方案',
-                    text: `确定要删除${url ? '远程' : '本地'}方案 ${name} 吗？`,
+                    title: i18n.__('renderer.del_scheme'),
+                    text: url ? i18n.__('renderer.del_scheme_remote_desc', name) : i18n.__('renderer.del_scheme_local_desc', name),
                     type: 'warning',
                     showCancelButton: true,
                     confirmButtonColor: '#DD6B55',
-                    confirmButtonText: '确定删除',
-                    cancelButtonText: '取消',
+                    confirmButtonText: i18n.__('renderer.del_confirm'),
+                    cancelButtonText: i18n.__('renderer.cancel'),
                     closeOnConfirm: false
                 }, function () {
                     fs.readFile(this.configFile, 'utf8', (err, data)=> {
                         if (err) {
                             swal({
-                                title: '操作失败',
+                                title: i18n.__('renderer.operation_failed'),
                                 text: err.message,
                                 type: 'error'
                             });
@@ -1120,12 +1174,12 @@ class HostsDock {
                                 }
                             });
                             if (hostsJson) {
-                                // 移除该Json
+                                // remove this json
                                 hostsArray.splice(hostsArray.indexOf(hostsJson), 1);
                                 fs.writeFile(this.configFile, JSON.stringify(config, null, 4), 'utf8', (err)=> {
                                     if (err) {
                                         swal({
-                                            title: '操作失败',
+                                            title: i18n.__('renderer.operation_failed'),
                                             text: err.message,
                                             type: 'error'
                                         });
@@ -1133,7 +1187,7 @@ class HostsDock {
                                         $('.lk-hosts[data-hosts-id=system]').click();
                                         $currentActiveBtn.parent().remove();
                                         swal({
-                                            title: "删除成功",
+                                            title: i18n.__('renderer.del_successfully'),
                                             type: 'success',
                                             showConfirmButton: false,
                                             timer: 1500
@@ -1142,7 +1196,7 @@ class HostsDock {
                                 })
                             } else {
                                 swal({
-                                    title: '操作失败',
+                                    title: i18n.__('renderer.operation_failed'),
                                     text: err.message,
                                     type: 'error'
                                 });
@@ -1155,7 +1209,7 @@ class HostsDock {
     }
 
     /**
-     * 刷新按钮处理函数
+     * refresh click handler
      * @param e
      */
     refreshClickHandler(e) {
@@ -1171,18 +1225,18 @@ class HostsDock {
         var url = $currentActiveBtn.attr('data-hosts-url');
         if (!url) {
             this.readHostsContent(id, (err, data)=> {
-                // TODO:当改变导航后不再执行回调
+                // TODO:no longer perform callback when navigation changed
                 if ($('.nav-items li.active .lk-hosts').attr('data-hosts-id') === id) {
                     if (err) {
                         swal({
-                            title: '读取hosts文本失败',
+                            title: i18n.__('renderer.load_hosts_failed'),
                             text: err.message,
                             type: 'error'
                         });
                         this.editor.session.setValue('', -1);
                     } else {
                         swal({
-                            title: "刷新成功",
+                            title: i18n.__('renderer.refresh_successfully'),
                             type: 'success',
                             showConfirmButton: false,
                             timer: 1500
@@ -1196,18 +1250,18 @@ class HostsDock {
             });
         } else {
             this.readHostsContent(id, url, (err, data)=> {
-                // TODO:当改变导航后不再执行回调
+                // TODO:no longer perform callback when navigation changed
                 if ($('.nav-items li.active .lk-hosts').attr('data-hosts-id') === id) {
                     if (err) {
                         swal({
-                            title: '远程文件读取失败',
+                            title: i18n.__('renderer.get_remote_failed'),
                             text: err.message,
                             type: 'error'
                         });
                         this.editor.session.setValue('', -1);
                     } else {
                         swal({
-                            title: "刷新成功",
+                            title: i18n.__('renderer.refresh_successfully'),
                             type: 'success',
                             showConfirmButton: false,
                             timer: 1500
@@ -1222,8 +1276,8 @@ class HostsDock {
     }
 
     /**
-     * Editor文档区鼠标移动处理函数
-     * @param e Event对象
+     * editor mouse move handler
+     * @param e event object
      */
     mouseMoveHandler(e) {
         var rowNum = e.editor.renderer.screenToTextCoordinates(e.clientX, e.clientY).row;
@@ -1236,14 +1290,14 @@ class HostsDock {
                 }
             });
             if ($gutter.length > 0) {
-                $gutter.prepend(`<button class='button-comment' data-line='${rowNum}' title='注释(Ctrl+/)'>#</button>`);
+                $gutter.prepend(`<button class='button-comment' data-line='${rowNum}' title='${i18n.__('renderer.comment')}(Ctrl+/)'>#</button>`);
             }
         }
     }
 
     /**
-     * Editor注释按钮单击处理函数
-     * @param e Event对象
+     * editor comment button click handler
+     * @param e event object
      */
     gutterMousedownHandler(e) {
         var $target = $(e.domEvent.target);
@@ -1254,7 +1308,7 @@ class HostsDock {
             var existsComments = false;
             var re = /^(\s*)#(.*)/;
 
-            // 手动添加一个command.name属性，目的是当触发更改事件时，判定为人为修改
+            // add command.name, the purpose is to determine artificially modified when a change event is triggered
             this.editor.curOp = {
                 command: {name: 'commentClick'}
             };
@@ -1277,13 +1331,13 @@ class HostsDock {
             else {
                 this.editor.session.indentRows(lineNum, lineNum, "#");
             }
-            // 必须重新设为null
+            // must reset to null
             this.editor.curOp = null;
         }
     }
 
     /**
-     * 系统弹窗提示
+     * system pop tips
      * @param msg
      */
     popNotification(msg) {

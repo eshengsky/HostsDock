@@ -13,6 +13,7 @@ Based on [Node.js](https://nodejs.org) and [Electron](http://electron.atom.io/).
 * Click on the the '#' button before line number can quickly comment/uncomment. 点击行号前的 '#' 按钮，可以快速注释/取消注释。
 * Original folding syntax, using #region and #endregion can create a folding hosts block. 独创折叠语法，使用 #region 和 #endregion 可以创建一个可折叠的 hosts 块。
 * The program will automatically call CMD (or terminal) to refresh the hosts so that the changes will take effect immediately. 程序会自动调用 cmd 或终端刷新 hosts 让改动立即生效。
+* Multi-language support (English, Simplified Chinese, traditional Chinese). 多语言支持（英文、简体中文、繁体中文）。
 
 ## Compatibility 兼容性
 Support OS X, Windows and Linux platform, see more details in [Supported Platforms](http://electron.atom.io/docs/tutorial/supported-platforms/)。 支持 OS X, Windows 及 Linux 操作系统，详细的支持情况参见 [支持的平台](http://electron.atom.io/docs/tutorial/supported-platforms/)。
