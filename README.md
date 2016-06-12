@@ -3,7 +3,7 @@
 Based on [Node.js](https://nodejs.org) and [Electron](http://electron.atom.io/). 基于 [Node.js](https://nodejs.org) 和 [Electron](http://electron.atom.io/) 构建。
 
 ## UI review 界面预览
-![image](https://github.com/eshengsky/HostsDock/blob/master/public/image/review.png)
+![image](https://github.com/eshengsky/HostsDock/blob/master/public/image/review_new.png)
 
 ## Functional features 功能特色
 * Support for both local and remote scheme. 支持创建本地 hosts 方案和远程 hosts 方案。
