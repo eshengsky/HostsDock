@@ -59,7 +59,7 @@ $ npm run dev
 $ npm install -g electron-packager
 ```
 #### 打包应用
-在完成了[Quick start 快速开始](#quick-start-快速开始)全部操作的前提下，进入需要打包的应用的目录，执行：
+在完成了[快速开始](#快速开始)全部操作的前提下，进入需要打包的应用的目录，执行：
 ```shell
 $ npm run package
 ```
