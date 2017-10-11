@@ -59,7 +59,8 @@ nav {
 .time-li {
     padding: 0.3em 0 0.3em 3.1em;
     font-size: 12px;
-    color: #777;
+    color: #999;
+    user-select: none;
     -webkit-user-select: none;
 }
 
@@ -77,6 +78,8 @@ nav {
     border: none;
     background-color: transparent;
     outline: none;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .toggle-title:before, .toggle-title:after {
@@ -138,6 +141,7 @@ nav {
     font-size: 12px;
     font-weight: 300;
     color: rgb(112, 112, 112);
+    letter-spacing: 0.6px;
 }
 
 .nav-items .lk-hosts {
@@ -145,7 +149,7 @@ nav {
     position: relative;
     width: 100%;
     padding: 0.5em 0em 0.5em 2.6em;
-    line-height: 2;
+    line-height: 25px;
     text-align: left;
     font-size: 14px;
     color: #444;
@@ -153,6 +157,7 @@ nav {
     background-color: transparent;
     cursor: default;
     outline: none;
+    user-select: none;
     -webkit-user-select: none;
     transition: all .4s;
 }
@@ -161,7 +166,7 @@ nav {
     display: none;
     font-size: 18px;
     position: absolute;
-    top: 12px;
+    top: 11px;
 }
 
 .applied {
@@ -211,6 +216,8 @@ main {
 
 #hosts-tool {
     padding: 0 8px;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 main .content {
@@ -231,6 +238,8 @@ footer {
     height: 40px;
     padding: 8px;
     border-top: 1px solid rgb(225, 225, 225);
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 footer.nav-footer {
@@ -299,11 +308,11 @@ footer.nav-footer {
     left: 0;
     top: -2px;
     text-align: left;
-    background: #1b9af7;
+    background-color: #7b72e9;
     color: #fff;
-    border: 1px solid #1B8EEB;
+    border: 1px solid #7b72e9;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
-    border-radius: 4px;
+    border-radius: 3px;
     cursor: pointer;
     font-family: 微软雅黑;
     font-size: 14px;
@@ -325,4 +334,139 @@ footer.nav-footer {
 
 .ace_replace_form {
     max-width: 303px !important;
+}
+
+.mask {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 10;
+    background-color: rgb(245, 245, 245);
+}
+
+.basicContext {
+    font-size: 14px;
+    font-family: 微软雅黑;
+}
+
+.basicContext table {
+    border-spacing: 0;
+}
+
+.basicContext table .basicContext__data {
+    padding: 8px 16px;
+    min-width: 146px;
+}
+
+#btnApplyTxt, #btnSysTxt {
+    font-family: 微软雅黑;
+    line-height: 1;
+}
+
+.no-comment .button-comment {
+    display: none !important;
+}
+
+.icon-btns .button {
+    margin-right: -3px;
+}
+
+.top {
+    position: fixed;
+    right: 28px;
+    bottom: 84px;
+    width: 35px;
+    height: 35px;
+    line-height: 60px;
+    text-align: center;
+    color: #fff;
+    font-size: 12px;
+    border-radius: 5px;
+    opacity: 0.3;
+    display: none;
+    background-color: #333;
+    z-index: 100;
+    cursor: pointer;
+}
+
+.top:before {
+    content: "";
+    position: absolute;
+    top: 58%;
+    left: 11px;
+    width: 12px;
+    height: 12px;
+    border-top: 1px solid #fff;
+    border-right: 1px solid #fff;
+    transform: translateY(-50%) rotate(-45deg);
+    -webkit-transform: translateY(-50%) rotate(-45deg);
+}
+
+.cg {
+    position: relative;
+    height: 100px;
+}
+
+.cg-wrap {
+    position: absolute;
+    left: 185px;
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: #59d;
+}
+
+.circle-left-wrap,
+.circle-right-wrap{
+    position:absolute;
+    top: 0;
+    left: 0;
+    width: 50px;
+    height: 100px;
+    overflow: hidden;
+}
+.circle-right-wrap{
+    left: 50px;
+}
+
+.circle-left,
+.circle-right{
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: #eee;
+    transition-property: all;
+}
+.circle-right{
+    left: -50px;
+}
+
+.circle-left{
+    clip: rect(0, 50px, auto, 0);
+}
+.circle-right{
+    clip: rect(0, auto, auto, 50px);
+}
+
+.cg-mask {
+    position: absolute;
+    top: 5px;
+    left: 5px;
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    background: #fff;
+    line-height: 90px;
+    text-align: center;
+    font-size: 24px;
+    color: #59d;
+}
+
+.sweet-alert p.test-desc {
+    margin-bottom: 20px;
 }

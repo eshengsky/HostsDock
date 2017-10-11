@@ -3,8 +3,17 @@ const path = require('path');
 const fs = require('fs');
 const i18n = require('i18n');
 const electron = require('electron');
+const ipc = electron.ipcMain;
+const Tray = electron.Tray;
+const dialog = electron.dialog;
+
 // Module to control application life.
 const app = electron.app;
+
+if (require('electron-squirrel-startup')) {
+    app.quit();
+}
+
 // Module to create native browser window.
 const BrowserWindow = electron.BrowserWindow;
 const Menu = electron.Menu;
@@ -12,28 +21,30 @@ const debug = /--debug/.test(process.argv[2]);
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
-var mainWindow = null;
+let mainWindow = null;
+let tray = null;
 const config = path.resolve(app.getPath('userData'), 'config.json');
 const localeArray = ['en-US', 'zh-CN', 'zh-TW'];
 
 function initialize() {
-    var shouldQuit = makeSingleInstance();
+    const shouldQuit = makeSingleInstance();
     if (shouldQuit) {
-        return app.quit();
+        return app.exit(0);
     }
 
     i18n.configure({
         locales: localeArray,
-        directory: __dirname + '/locales',
+        directory: `${__dirname}/locales`,
         objectNotation: true
     });
 
     function createWindow() {
-        var windowOptions = {
+        const windowOptions = {
             width: 1080,
             minWidth: 680,
             height: 840,
-            icon: path.join(__dirname, `${process.platform === 'win32' ? '/public/image/hostsdock.ico' : '/public/image/hostsdock.png'}`)
+            icon: path.join(__dirname, `${process.platform === 'win32' ? '/public/image/hostsdock.ico' : '/public/image/hostsdock.png'}`),
+            show: false
         };
 
         // Create the browser window.
@@ -47,8 +58,17 @@ function initialize() {
             mainWindow.maximize();
         }
 
+        mainWindow.once('ready-to-show', () => {
+            mainWindow.show();
+        });
+
+        mainWindow.on('close', event => {
+            event.preventDefault();
+            mainWindow.hide();
+        });
+
         // Emitted when the window is closed.
-        mainWindow.on('closed', function () {
+        mainWindow.on('closed', () => {
             // Dereference the window object, usually you would store windows
             // in an array if your app supports multi windows, this is the time
             // when you should delete the corresponding element.
@@ -62,9 +82,9 @@ function initialize() {
      */
     function getLocale() {
         // get locale from config if exists
-        var locale;
+        let locale;
         try {
-            var data = fs.readFileSync(config, 'utf8');
+            let data = fs.readFileSync(config, 'utf8');
             data = JSON.parse(data);
             locale = data.locale;
         } catch (e) {
@@ -89,7 +109,7 @@ function initialize() {
      */
     function setLocale(locale) {
         try {
-            var data = fs.readFileSync(config, 'utf8');
+            let data = fs.readFileSync(config, 'utf8');
             data = JSON.parse(data);
             data.locale = locale;
             fs.writeFileSync(config, JSON.stringify(data, null, 4), 'utf8');
@@ -100,48 +120,126 @@ function initialize() {
 
     // This method will be called when Electron has finished
     // initialization and is ready to create browser windows.
-    app.on('ready', function () {
+    app.on('ready', () => {
         createWindow();
-        var locale = getLocale();
+        const locale = getLocale();
         i18n.setLocale(locale);
-        // Menus
-        var template = [{
-            label: i18n.__('main_menu.program'),
-            submenu: [{
-                label: i18n.__('main_menu.reload'),
-                accelerator: 'CmdOrCtrl+R',
-                click: function (item, focusedWindow) {
-                    if (focusedWindow) {
-                        // on reload, start fresh and close any old
-                        // open secondary windows
-                        if (focusedWindow.id === 1) {
-                            BrowserWindow.getAllWindows().forEach(function (win) {
-                                if (win.id > 1) {
-                                    win.close()
-                                }
-                            })
-                        }
-                        focusedWindow.reload()
+
+        ipc.on('save-dialog', (event, data) => {
+            const options = {
+                title: i18n.__('renderer.export_title'),
+                defaultPath: 'hosts',
+                buttonLabel: i18n.__('renderer.btnExport')
+            };
+            dialog.showSaveDialog(options, fileName => {
+                event.sender.send('save-file', {
+                    fileName,
+                    id: data.id,
+                    url: data.url
+                });
+            });
+        });
+
+        // Tray
+        tray = new Tray(path.join(__dirname, `${process.platform === 'win32' ? '/public/image/hostsdock.ico' : '/public/image/hostsdock.png'}`));
+        tray.on('double-click', () => {
+            mainWindow.show();
+        });
+        tray.setToolTip('HostsDock');
+
+        ipc.on('tray', (event, data) => {
+            const appliedId = data.appliedId;
+
+            // list local schema
+            const list = [{
+                label: i18n.__('renderer.local'),
+                enabled: false
+            }];
+            data.localHosts.forEach(item => {
+                list.push({
+                    label: item.name,
+                    type: 'checkbox',
+                    checked: item.id === appliedId,
+                    click() {
+                        mainWindow.webContents.send('apply', {
+                            id: item.id,
+                            name: item.name
+                        });
                     }
+                });
+            });
+
+            // list remote schema
+            list.push({
+                label: i18n.__('renderer.remote'),
+                enabled: false
+            });
+            data.remoteHosts.forEach(item => {
+                list.push({
+                    label: item.name,
+                    type: 'checkbox',
+                    checked: item.id === appliedId,
+                    click() {
+                        mainWindow.webContents.send('apply', {
+                            id: item.id,
+                            name: item.name,
+                            url: item.url
+                        });
+                    }
+                });
+            });
+
+            list.push({
+                type: 'separator'
+            }, {
+                label: i18n.__('tray_menu.win'),
+                click() {
+                    mainWindow.show();
                 }
             }, {
-                label: i18n.__('main_menu.full_screen'),
-                accelerator: (function () {
-                    if (process.platform === 'darwin') {
-                        return 'Ctrl+Command+F'
-                    } else {
-                        return 'F11'
-                    }
-                })(),
-                click: function (item, focusedWindow) {
+                label: i18n.__('main_menu.exit'),
+                click() {
+                    app.exit(0);
+                }
+            });
+            const contextMenu = Menu.buildFromTemplate(list);
+            tray.setContextMenu(contextMenu);
+        });
+
+        // Menus
+        const template = [{
+            label: i18n.__('main_menu.file'),
+            submenu: [{
+                label: i18n.__('main_menu.new'),
+                accelerator: 'CmdOrCtrl+N',
+                click(item, focusedWindow) {
+                    // send to renderer
+                    focusedWindow.webContents.send('new', true);
+                }
+            }, {
+                label: i18n.__('renderer.btnExport'),
+                accelerator: 'CmdOrCtrl+E',
+                click(item, focusedWindow) {
+                    // send to renderer
+                    focusedWindow.webContents.send('export', true);
+                }
+            }, {
+                type: 'separator'
+            }, {
+                label: i18n.__('main_menu.reload'),
+                accelerator: 'CmdOrCtrl+R',
+                click(item, focusedWindow) {
                     if (focusedWindow) {
-                        focusedWindow.setFullScreen(!focusedWindow.isFullScreen())
+                        app.relaunch();
+                        app.exit(0);
                     }
                 }
             }, {
                 label: i18n.__('main_menu.exit'),
                 accelerator: 'CmdOrCtrl+W',
-                role: 'close'
+                click() {
+                    app.exit(0);
+                }
             }]
         }, {
             label: i18n.__('main_menu.edit'),
@@ -168,7 +266,7 @@ function initialize() {
                 label: 'English',
                 type: 'checkbox',
                 checked: locale === 'en-US',
-                click: function () {
+                click() {
                     setLocale('en-US');
                     app.relaunch();
                     app.exit(0);
@@ -177,7 +275,7 @@ function initialize() {
                 label: '简体中文',
                 type: 'checkbox',
                 checked: locale === 'zh-CN',
-                click: function () {
+                click() {
                     setLocale('zh-CN');
                     app.relaunch();
                     app.exit(0);
@@ -186,26 +284,63 @@ function initialize() {
                 label: '繁體中文',
                 type: 'checkbox',
                 checked: locale === 'zh-TW',
-                click: function () {
+                click() {
                     setLocale('zh-TW');
                     app.relaunch();
                     app.exit(0);
                 }
             }]
         }, {
+            label: i18n.__('main_menu.window'),
+            submenu: [{
+                label: i18n.__('main_menu.min'),
+                role: 'minimize'
+            }, {
+                label: i18n.__('main_menu.full_screen'),
+                accelerator: (function () {
+                    if (process.platform === 'darwin') {
+                        return 'CmdOrCtrl+F';
+                    }
+                    return 'F11';
+                }()),
+                click(item, focusedWindow) {
+                    if (focusedWindow) {
+                        focusedWindow.setFullScreen(!focusedWindow.isFullScreen());
+                    }
+                }
+            }]
+        }, {
             label: i18n.__('main_menu.help'),
             submenu: [{
-                label: i18n.__('main_menu.version') + ' ' + app.getVersion(),
+                label: `${i18n.__('main_menu.version')} ${app.getVersion()}`,
                 enabled: false
             }, {
                 label: i18n.__('main_menu.homepage'),
-                click: function () {
-                    electron.shell.openExternal('https://github.com/eshengsky/HostsDock')
+                click() {
+                    electron.shell.openExternal('https://github.com/eshengsky/HostsDock');
                 }
             }, {
+                label: i18n.__('main_menu.issue'),
+                click() {
+                    electron.shell.openExternal('https://github.com/eshengsky/HostsDock/issues');
+                }
+            }, {
+                type: 'separator'
+            }, {
+                label: i18n.__('main_menu.devtool'),
+                accelerator: (function () {
+                    if (process.platform === 'darwin') {
+                        return 'CmdOrCtrl+T';
+                    }
+                    return 'F12';
+                }()),
+                role: 'toggledevtools'
+            }, {
+                type: 'separator'
+            }, {
                 label: i18n.__('main_menu.about'),
-                click: function () {
-                    electron.shell.openExternal('http://www.skysun.name/about')
+                click() {
+                    electron.shell.openExternal('http://www.skysun.name/about');
                 }
             }]
         }];
@@ -214,7 +349,7 @@ function initialize() {
     });
 
     // Quit when all windows are closed.
-    app.on('window-all-closed', function () {
+    app.on('window-all-closed', () => {
         // On OS X it is common for applications and their menu bar
         // to stay active until the user quits explicitly with Cmd + Q
         if (process.platform !== 'darwin') {
@@ -222,23 +357,26 @@ function initialize() {
         }
     });
 
-    app.on('activate', function () {
-        // On OS X it's common to re-create a window in the app when the
-        // dock icon is clicked and there are no other windows open.
+    app.on('activate', () => {
         if (mainWindow === null) {
             createWindow();
+        } else {
+            mainWindow.show();
         }
+    });
+
+    app.on('before-quit', () => {
+        app.isQuiting = true;
     });
 }
 
 function makeSingleInstance() {
-    return app.makeSingleInstance(function () {
+    return app.makeSingleInstance(() => {
         if (mainWindow) {
             if (mainWindow.isMinimized()) mainWindow.restore();
-            mainWindow.focus()
+            mainWindow.focus();
         }
-    })
+    });
 }
 
 initialize();
-

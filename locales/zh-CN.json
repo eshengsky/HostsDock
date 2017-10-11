@@ -1,6 +1,7 @@
 {
   "main_menu": {
-    "program": "程序",
+    "file": "文件",
+    "new": "新建",
     "reload": "重新加载",
     "full_screen": "全屏模式",
     "exit": "退出",
@@ -9,16 +10,23 @@
     "cut": "剪切",
     "paste": "粘贴",
     "select_all": "全选",
+    "window": "窗口",
+    "min": "最小化",
     "help": "帮助",
     "version": "版本",
     "homepage": "项目主页",
+    "issue": "问题反馈",
+    "devtool": "切换开发人员工具",
     "about": "关于作者"
+  },
+  "tray_menu": {
+    "win": "显示主窗口"
   },
   "renderer": {
     "system": "系统",
     "system_desc": "系统hosts信息",
     "system_hosts": "当前系统hosts",
-    "update_at": "更新于",
+    "update_at": "最后修改",
     "update_time": "系统hosts修改时间",
     "local": "本地",
     "local_desc":"本地hosts方案",
@@ -26,9 +34,12 @@
     "remote_desc":"远程hosts方案",
     "btnNew": "新建",
     "btnRefresh":"刷新",
+    "btnExport":"导出",
     "btnEdit":"编辑",
+    "btnCheck": "检测hosts",
     "btnDelete":"删除",
     "btnApply":"应用",
+    "btnSysTxt": "打开系统目录",
     "btnUndo":"撤销",
     "btnRedo":"重做",
     "btnCopy":"复制",
@@ -77,6 +88,16 @@
     "del_confirm": "确定删除",
     "del_successfully": "删除成功",
     "refresh_successfully": "刷新成功",
-    "comment":"注释"
+    "comment":"注释",
+    "export_title": "导出hosts文件",
+    "export_success": "导出成功",
+    "file_path": "文件路径",
+    "btnTop": "回到顶部",
+    "test_hosts": "测试hosts",
+    "start_test": "开始检测",
+    "test_desc": "使用 ping 命令检测该hosts中的ip是否连通",
+    "test_done": "完成检测",
+    "test_done_desc": "正在打开检测报告...",
+    "test_report": "检测报告"
   }
 }

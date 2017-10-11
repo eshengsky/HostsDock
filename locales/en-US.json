@@ -1,6 +1,7 @@
 {
   "main_menu": {
-    "program": "Program",
+    "file": "File",
+    "new": "New",
     "reload": "Reload",
     "full_screen": "Full Screen",
     "exit": "Exit",
@@ -9,16 +10,23 @@
     "cut": "Cut",
     "paste": "Paste",
     "select_all": "Select All",
+    "window": "Window",
+    "min": "Minimize",
     "help": "Help",
     "version": "Version",
     "homepage": "Project Homepage",
+    "issue": "Submit issues",
+    "devtool": "Toggle developer tools",
     "about": "About Author"
+  },
+  "tray_menu": {
+    "win": "Show main window"
   },
   "renderer": {
     "system": "System",
     "system_desc": "system hosts info",
     "system_hosts": "Current system hosts",
-    "update_at": "Update at",
+    "update_at": "Last modified at",
     "update_time": "System hosts modified time",
     "local": "Local",
     "local_desc":"local hosts scheme",
@@ -26,9 +34,12 @@
     "remote_desc":"remote hosts scheme",
     "btnNew": "New",
     "btnRefresh":"Refresh",
+    "btnExport":"Export",
     "btnEdit":"Edit",
+    "btnCheck": "Test hosts",
     "btnDelete":"Delete",
     "btnApply":"Apply",
+    "btnSysTxt": "Open system folder",
     "btnUndo":"Undo",
     "btnRedo":"Redo",
     "btnCopy":"Copy",
@@ -77,6 +88,16 @@
     "del_confirm": "Confirm",
     "del_successfully": "Delete successfully",
     "refresh_successfully": "Refresh successfully",
-    "comment":"Comment"
+    "comment":"Comment",
+    "export_title": "Export hosts file",
+    "export_success": "Export successfully",
+    "file_path": "File path",
+    "btnTop": "Top",
+    "test_hosts": "Test hosts",
+    "start_test": "Start",
+    "test_desc": "Use ping command to test ips in hosts",
+    "test_done": "Test complete",
+    "test_done_desc": "Opening test report...",
+    "test_report": "Test report"
   }
 }

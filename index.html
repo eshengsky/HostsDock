@@ -7,6 +7,9 @@
     <link rel="stylesheet" href="bower_components/sweetalert/dist/sweetalert.css">
     <link rel="stylesheet" href="public/css/swal-forms.css">
     <link rel="stylesheet" href="bower_components/Buttons/css/buttons.min.css">
+    <link rel="stylesheet" href="bower_components/basicContext/dist/basicContext.min.css">
+    <link rel="stylesheet" href="bower_components/basicContext/dist/themes/bright.min.css">
+    <link rel="stylesheet" href="bower_components/basicContext/dist/addons/popin.min.css">
     <link rel="stylesheet" href="public/css/index.css">
 </head>
 <body>
@@ -47,27 +50,29 @@
         </div>
     </div>
     <footer class="nav-footer">
-        <button class="button button-action button-circle" id="btnNew" title=""><i class="fa fa-plus"></i>
+        <button class="button button-primary button-circle" id="btnNew" title=""><i class="fa fa-plus"></i>
         </button>
     </footer>
 </nav>
 <main>
     <div id="hosts-tool">
-        <button class="button button-borderless button-small" id="btnUndo" title="">
-            <i class="fa fa-undo"></i>
-        </button>
-        <button class="button button-borderless button-small" id="btnRedo" title="">
-            <i class="fa fa-repeat"></i>
-        </button>
-        <button class="button button-borderless button-small" id="btnCopy" title="">
-            <i class="fa fa-copy"></i>
-        </button>
-        <button class="button button-borderless button-small" id="btnCut" title="">
-            <i class="fa fa-scissors"></i>
-        </button>
-        <button class="button button-borderless button-small" id="btnPaste" title="">
-            <i class="fa fa-paste"></i>
-        </button>
+        <span id="editor-tool-dynamic">
+            <button class="button button-borderless button-small" id="btnUndo" title="">
+                <i class="fa fa-undo"></i>
+            </button>
+            <button class="button button-borderless button-small" id="btnRedo" title="">
+                <i class="fa fa-repeat"></i>
+            </button>
+            <button class="button button-borderless button-small" id="btnCopy" title="">
+                <i class="fa fa-copy"></i>
+            </button>
+            <button class="button button-borderless button-small" id="btnCut" title="">
+                <i class="fa fa-scissors"></i>
+            </button>
+            <button class="button button-borderless button-small" id="btnPaste" title="">
+                <i class="fa fa-paste"></i>
+            </button>
+        </span>
         <button class="button button-borderless button-small" id="btnSearch" title="">
             <i class="fa fa-search"></i>
         </button>
@@ -86,28 +91,43 @@
     </div>
     <div id="hosts-content" class="content" contenteditable="true">
     </div>
+    <div class="top" title=""></div>
     <footer>
-        <button class="button button-primary button-circle" id="btnRefresh" title="">
-            <i class="fa fa-refresh"></i>
-        </button>
-        <button class="button button-royal button-circle" id="btnEdit" title="" style="display:none;">
-            <i class="fa fa-pencil"></i>
-        </button>
-        <button class="button button-caution button-circle" id="btnDelete" title="" style="display:none;">
-            <i class="fa fa-trash-o"></i>
-        </button>
-        <button class="button button-highlight button-circle" id="btnApply" title=""
+        <span class="icon-btns">
+            <button class="button button-primary button-borderless button-box" id="btnRefresh" title="">
+                <i class="fa fa-refresh"></i>
+            </button>
+            <button class="button button-primary button-borderless button-box" id="btnExport" title="">
+                <i class="fa fa-sign-out"></i>
+            </button>
+            <button class="button button-primary button-borderless button-box" id="btnEdit" title="" style="display:none;">
+                <i class="fa fa-pencil"></i>
+            </button>
+            <button class="button button-royal button-borderless button-box" id="btnCheck" title="" style="display:none;">
+                <i class="fa fa-flask"></i>
+            </button>
+            <button class="button button-caution button-borderless button-box" id="btnDelete" title="" style="display:none;">
+                <i class="fa fa-trash-o"></i>
+            </button>
+        </span>
+        <button class="button button-highlight button-rounded button-glow" id="btnApply" title=""
                 style="float:right;display:none;">
-            <i class="fa fa-check"></i>
+            <i class="fa fa-check"></i> <span id="btnApplyTxt"></span>
+        </button>
+        <button class="button button-highlight button-rounded button-glow" id="btnSys" title=""
+                style="float:right;display:none;">
+            <span id="btnSysTxt"></span>
         </button>
     </footer>
 </main>
+<div class="mask"></div>
 <script src="./public/javascript/ace/ace.js" type="text/javascript" charset="utf-8"></script>
 <script src="./public/javascript/ace/ext-searchbox.js" type="text/javascript" charset="utf-8"></script>
 <script>
     window.$ = window.jQuery = require('./bower_components/jquery/dist/jquery.min.js');
     require('./bower_components/sweetalert/dist/sweetalert.min.js');
     require('./public/javascript/swal-forms.js');
+    window.basicContext = require('./bower_components/basicContext/dist/basicContext.min.js');
     require('./public/javascript/index.js');
 </script>
 </body>

@@ -1,13 +1,18 @@
 const fs = require('fs');
 const cp = require('child_process');
-const remote = require('electron').remote;
+const electron = require('electron');
+const remote = electron.remote;
 const app = remote.app;
+const ipc = electron.ipcRenderer;
+const shell = electron.shell;
 const notifier = require('node-notifier');
 const path = require('path');
 const moment = require('moment');
 const shortid = require('shortid');
 const request = require('request');
 const async = require('async');
+const ping = require('ping');
+const BrowserWindow = remote.BrowserWindow;
 const i18n = require('i18n');
 const localeArray = ['en-US', 'zh-CN', 'zh-TW'];
 i18n.configure({
@@ -15,9 +20,9 @@ i18n.configure({
     directory: path.join(__dirname, '../../locales'),
     objectNotation: true
 });
-var locale;
+let locale;
 try {
-    var data = fs.readFileSync(path.resolve(app.getPath('userData'), 'config.json'), 'utf8');
+    let data = fs.readFileSync(path.resolve(app.getPath('userData'), 'config.json'), 'utf8');
     data = JSON.parse(data);
     locale = data.locale;
 } catch (e) {
@@ -35,6 +40,7 @@ class HostsDock {
     constructor() {
         this.hostsDockDir = path.resolve(app.getPath('userData'), 'LocalHosts'); // local hosts folder
         this.configFile = path.resolve(app.getPath('userData'), 'config.json'); // user config path
+        this.reportFile = path.resolve(app.getPath('userData'), 'report.html');
         this.platForm = process.platform;
         this.sysHostsFile = this.platForm === 'win32' ? 'c:\\windows\\system32\\drivers\\etc\\hosts' : '/etc/hosts'; // system hosts path
         this.originalHostsId = 'orignial';
@@ -44,7 +50,7 @@ class HostsDock {
         this.systemHostsId = 'system';
         this.loadingMin = 500;
         this.urlPattern = /((\w+:\/\/|\\\\)[-a-zA-Z0-9:@;?&=\/%\+\.\*!'\(\),\$_\{\}\^~\[\]`#|]+)/;
-        this.editor = ace.edit("hosts-content");
+        this.editor = ace.edit('hosts-content');
         this.buffer = null; // the cache for content change, set:editor changed manually, get:listener triggers
         this.bufferTimeInterval = 1000; // interval time to batch write
     }
@@ -65,11 +71,22 @@ class HostsDock {
      * detect necessary files
      */
     detectFiles() {
-        async.map([this.hostsDockDir, this.configFile], fs.stat, (err, results)=> {
+        // check if original file/folder exists
+        async.map([this.hostsDockDir, this.configFile], fs.stat, (err, results) => {
             // first run app
             if (err || !results[0].isDirectory() || !results[1].isFile()) {
+                let counter = 0;
+
+                const cb = function () {
+                    counter++;
+                    if (counter === 3) {
+                        // all async func finished
+                        $('.mask').remove();
+                    }
+                };
+
                 // create LocalHosts folder
-                fs.mkdir(this.hostsDockDir, (err)=> {
+                fs.mkdir(this.hostsDockDir, err => {
                     if (err && err.code !== 'EEXIST') {
                         swal({
                             title: i18n.__('renderer.create_local_dir_err'),
@@ -78,33 +95,39 @@ class HostsDock {
                         });
                     } else {
                         // create an original file
-                        var now = moment(Date.now()).format('YYYY/MM/DD HH:mm:ss');
+                        const now = moment(Date.now())
+                            .format('YYYY/MM/DD HH:mm:ss');
                         this.writeHostsContent(this.originalHostsId, `# HostsDock - Created at ${now}
 #region Localhost
 127.0.0.1 localhost
 255.255.255.255 broadcasthost
-#endregion`, (err)=> {
-                            if (err) {
-                                swal({
-                                    title: i18n.__('renderer.create_file_err', this.originalHostsName),
-                                    text: err.message,
-                                    type: 'error'
-                                });
-                            }
-                        });
+#endregion`, err => {
+                                if (err) {
+                                    swal({
+                                        title: i18n.__('renderer.create_file_err', this.originalHostsName),
+                                        text: err.message,
+                                        type: 'error'
+                                    });
+                                } else {
+                                    cb();
+                                }
+                            });
+
                         // create a system backup file, copy content from system hosts
-                        this.copyHostsContent(this.systemHostsId, this.backupHostsId, (err)=> {
+                        this.copyHostsContent(this.systemHostsId, this.backupHostsId, err => {
                             if (err) {
                                 swal({
                                     title: i18n.__('renderer.create_file_err', this.backupHostsName),
                                     text: err.message,
                                     type: 'error'
                                 });
+                            } else {
+                                cb();
                             }
                         });
                     }
                 });
-                let config = {
+                const config = {
                     appliedId: '',
                     locale: '',
                     fontSize: '14',
@@ -119,33 +142,26 @@ class HostsDock {
                     }],
                     remoteHosts: []
                 };
+
                 // create user config file
-                fs.writeFile(this.configFile, JSON.stringify(config, null, 4), (err) => {
+                fs.writeFile(this.configFile, JSON.stringify(config, null, 4), err => {
                     if (err) {
                         swal({
                             title: i18n.__('renderer.create_config_err'),
                             text: err.message,
                             type: 'error'
                         });
+                    } else {
+                        cb();
                     }
                 });
+
                 // In order to improve the execution efficiency, the method does not rely on the necessary files when passed true
                 this.loadHostsList(true);
             } else {
                 this.loadHostsList();
             }
         });
-
-        // detect system hosts r/w permissions
-        fs.access(this.sysHostsFile, fs.R_OK | fs.W_OK, (err)=> {
-            if (err) {
-                swal({
-                    title: i18n.__('renderer.no_permission'),
-                    text: i18n.__('renderer.run_with_admin'),
-                    type: 'error'
-                });
-            }
-        })
     }
 
     /**
@@ -153,9 +169,22 @@ class HostsDock {
      */
     loadHostsList(isFirst = false) {
         if (isFirst) {
-            $('.nav-local').append(`<li><a class='lk-hosts' data-hosts-id='${this.originalHostsId}'><i class='applied fa fa-check' title='${i18n.__('renderer.applied')}'></i><i class='fa fa-file-text-o'></i> <span>${this.originalHostsName}</span><i class='loading fa fa-spinner fa-spin' title='${i18n.__('renderer.loading')}'></i></a></li>` +
+            $('.nav-local')
+                .append(`<li><a class='lk-hosts' data-hosts-id='${this.originalHostsId}'><i class='applied fa fa-check' title='${i18n.__('renderer.applied')}'></i><i class='fa fa-file-text-o'></i> <span>${this.originalHostsName}</span><i class='loading fa fa-spinner fa-spin' title='${i18n.__('renderer.loading')}'></i></a></li>` +
                 `<li><a class='lk-hosts' data-hosts-id='${this.backupHostsId}'><i class='applied fa fa-check' title='${i18n.__('renderer.applied')}'></i><i class='fa fa-file-text-o'></i> <span>${this.backupHostsName}</span><i class='loading fa fa-spinner fa-spin' title='${i18n.__('renderer.loading')}'></i></a></li>`);
-            $(`.lk-hosts[data-hosts-id=${this.systemHostsId}]`).click();
+            $(`.lk-hosts[data-hosts-id=${this.systemHostsId}]`)
+                .click();
+            ipc.send('tray', {
+                appliedId: '',
+                localHosts: [{
+                    id: this.originalHostsId,
+                    name: this.originalHostsName
+                }, {
+                    id: this.backupHostsId,
+                    name: this.backupHostsName
+                }],
+                remoteHosts: []
+            });
         } else {
             fs.readFile(this.configFile, 'utf8', (err, data) => {
                 if (err) {
@@ -166,90 +195,138 @@ class HostsDock {
                     });
                 } else {
                     data = JSON.parse(data);
-                    let appliedId = data.appliedId;
-                    let localHosts = data.localHosts;
-                    let remoteHosts = data.remoteHosts;
+
+                    ipc.send('tray', data);
+
+                    const appliedId = data.appliedId;
+                    const localHosts = data.localHosts;
+                    const remoteHosts = data.remoteHosts;
                     let localHtml = '';
-                    let allIdArr = [];
-                    localHosts.forEach((item)=> {
+                    const allIdArr = [];
+                    localHosts.forEach(item => {
                         allIdArr.push(item.id);
-                        localHtml += `<li><a class='lk-hosts' data-hosts-id='${item.id}'><i class='applied fa fa-check' style='${appliedId === item.id ? "display:inline-block" : ""}' title='${i18n.__('renderer.applied')}'></i><i class='fa fa-file-text-o'></i> <span>${item.name}</span><i class='loading fa fa-spinner fa-spin' title='${i18n.__('renderer.loading')}'></i></a></li>`;
+                        localHtml += `<li><a class='lk-hosts' data-hosts-id='${item.id}'><i class='applied fa fa-check' style='${appliedId === item.id ? 'display:inline-block' : ''}' title='${i18n.__('renderer.applied')}'></i><i class='fa fa-file-text-o'></i> <span>${item.name}</span><i class='loading fa fa-spinner fa-spin' title='${i18n.__('renderer.loading')}'></i></a></li>`;
                     });
-                    $('.nav-local').append(localHtml);
+                    $('.nav-local')
+                        .append(localHtml);
                     let remoteHtml = '';
-                    remoteHosts.forEach((item)=> {
+                    remoteHosts.forEach(item => {
                         allIdArr.push(item.id);
-                        remoteHtml += `<li><a class='lk-hosts' data-hosts-id='${item.id}' data-hosts-url='${item.url}'><i class='applied fa fa-check' style='${appliedId === item.id ? "display:inline-block" : ""}' title='${i18n.__('renderer.applied')}'></i><i class='fa fa-globe'></i> <span>${item.name}</span><i class='loading fa fa-spinner fa-spin' title='${i18n.__('renderer.loading')}'></i></a></li>`;
+                        remoteHtml += `<li><a class='lk-hosts' data-hosts-id='${item.id}' data-hosts-url='${item.url}'><i class='applied fa fa-check' style='${appliedId === item.id ? 'display:inline-block' : ''}' title='${i18n.__('renderer.applied')}'></i><i class='fa fa-globe'></i> <span>${item.name}</span><i class='loading fa fa-spinner fa-spin' title='${i18n.__('renderer.loading')}'></i></a></li>`;
                     });
-                    $('.nav-remote').append(remoteHtml);
+                    $('.nav-remote')
+                        .append(remoteHtml);
+
                     // already applied some scheme when last exit
                     if (appliedId && allIdArr.indexOf(appliedId) >= 0) {
-                        $(`.lk-hosts[data-hosts-id=${appliedId}]`).click();
+                        $(`.lk-hosts[data-hosts-id=${appliedId}]`)
+                            .click();
                     } else {
-                        $(`.lk-hosts[data-hosts-id=${this.systemHostsId}]`).click();
+                        $(`.lk-hosts[data-hosts-id=${this.systemHostsId}]`)
+                            .click();
                     }
+
+                    // remove mask, show page
+                    $('.mask').remove();
                 }
             });
         }
-
     }
 
     /**
      * init UI text
      */
-    initUiText(){
-        $('.title-sys span').text(i18n.__('renderer.system'));
-        $('.title-sys p').text(i18n.__('renderer.system_desc'));
-        $('[data-hosts-id=system] span').text(i18n.__('renderer.system_hosts'));
-        $('[data-hosts-id=system] i:eq(1)').attr('title',i18n.__('renderer.loading'));
-        $('.time-li').attr('title', i18n.__('renderer.update_time'));
-        $('#update-at').text(i18n.__('renderer.update_at'));
-        $('.title-local span').text(i18n.__('renderer.local'));
-        $('.title-local p').text(i18n.__('renderer.local_desc'));
-        $('.title-remote span').text(i18n.__('renderer.remote'));
-        $('.title-remote p').text(i18n.__('renderer.remote_desc'));
+    initUiText() {
+        $('.title-sys span')
+            .text(i18n.__('renderer.system'));
+        $('.title-sys p')
+            .text(i18n.__('renderer.system_desc'));
+        $('[data-hosts-id=system] span')
+            .text(i18n.__('renderer.system_hosts'));
+        $('[data-hosts-id=system] i:eq(1)')
+            .attr('title', i18n.__('renderer.loading'));
+        $('.time-li')
+            .attr('title', i18n.__('renderer.update_time'));
+        $('#update-at')
+            .text(i18n.__('renderer.update_at'));
+        $('.title-local span')
+            .text(i18n.__('renderer.local'));
+        $('.title-local p')
+            .text(i18n.__('renderer.local_desc'));
+        $('.title-remote span')
+            .text(i18n.__('renderer.remote'));
+        $('.title-remote p')
+            .text(i18n.__('renderer.remote_desc'));
 
-        $('#btnNew').attr('title', i18n.__('renderer.btnNew'));
-        $('#btnRefresh').attr('title', i18n.__('renderer.btnRefresh'));
-        $('#btnEdit').attr('title', i18n.__('renderer.btnEdit'));
-        $('#btnDelete').attr('title', i18n.__('renderer.btnDelete'));
-        $('#btnApply').attr('title', i18n.__('renderer.btnApply'));
+        $('#btnNew')
+            .attr('title', i18n.__('renderer.btnNew'));
+        $('#btnRefresh')
+            .attr('title', i18n.__('renderer.btnRefresh'));
+        $('#btnExport')
+            .attr('title', i18n.__('renderer.btnExport'));
+        $('#btnEdit')
+            .attr('title', i18n.__('renderer.btnEdit'));
+        $('#btnCheck')
+            .attr('title', i18n.__('renderer.btnCheck'));
+        $('#btnDelete')
+            .attr('title', i18n.__('renderer.btnDelete'));
+        $('#btnApply')
+            .attr('title', i18n.__('renderer.btnApply'));
+        $('#btnApplyTxt').text(i18n.__('renderer.btnApply'));
+        $('#btnSys')
+            .attr('title', i18n.__('renderer.btnSysTxt'));
+        $('#btnSysTxt').text(i18n.__('renderer.btnSysTxt'));
 
-        $('#btnUndo').attr('title', i18n.__('renderer.btnUndo') + '(Ctrl+Z)');
-        $('#btnRedo').attr('title', i18n.__('renderer.btnRedo') + '(Ctrl+Shift+Z)');
-        $('#btnCopy').attr('title', i18n.__('renderer.btnCopy') + '(Ctrl+C)');
-        $('#btnCut').attr('title', i18n.__('renderer.btnCut') + '(Ctrl+X)');
-        $('#btnPaste').attr('title', i18n.__('renderer.btnPaste') + '(Ctrl+V)');
-        $('#btnSearch').attr('title', i18n.__('renderer.btnSearch') + '(Ctrl+F)');
-        $('#btnReplace').attr('title', i18n.__('renderer.btnReplace') + '(Ctrl+H)');
+        $('#btnUndo')
+            .attr('title', `${i18n.__('renderer.btnUndo')}(Ctrl+Z)`);
+        $('#btnRedo')
+            .attr('title', `${i18n.__('renderer.btnRedo')}(Ctrl+Shift+Z)`);
+        $('#btnCopy')
+            .attr('title', `${i18n.__('renderer.btnCopy')}(Ctrl+C)`);
+        $('#btnCut')
+            .attr('title', `${i18n.__('renderer.btnCut')}(Ctrl+X)`);
+        $('#btnPaste')
+            .attr('title', `${i18n.__('renderer.btnPaste')}(Ctrl+V)`);
+        $('#btnSearch')
+            .attr('title', `${i18n.__('renderer.btnSearch')}(Ctrl+F)`);
+        $('#btnReplace')
+            .attr('title', `${i18n.__('renderer.btnReplace')}(Ctrl+H)`);
+
+        $('.top')
+            .attr('title', i18n.__('renderer.btnTop'));
     }
 
     /**
      * init Editor
      */
     loadEditor() {
-        this.editor.setTheme("ace/theme/hosts");
-        this.editor.session.setMode("ace/mode/hosts");
+        this.editor.setTheme('ace/theme/hosts');
+        this.editor.session.setMode('ace/mode/hosts');
         this.editor.$blockScrolling = Infinity;
         this.editor.session.on('change', () => this.changeHandler());
-        this.editor.on('mousemove', (e) => this.mouseMoveHandler(e));
-        this.editor.on('guttermousemove', (e) => this.mouseMoveHandler(e));
-        this.editor.on('guttermousedown', (e) => this.gutterMousedownHandler(e));
+        this.editor.on('mousemove', e => this.mouseMoveHandler(e));
+        this.editor.on('guttermousemove', e => this.mouseMoveHandler(e));
+        this.editor.on('guttermousedown', e => this.gutterMousedownHandler(e));
+        this.editor.session.on('changeScrollTop', top => this.scollHandler(top));
     }
 
     /**
      * listen for system hosts
      */
     watchSysHosts() {
-        fs.stat(this.sysHostsFile, (err, stats)=> {
+        fs.stat(this.sysHostsFile, (err, stats) => {
             if (!err) {
-                var lastModified = moment(stats.mtime).format('YYYY/MM/DD HH:mm:ss');
-                $('#modified-time').text(lastModified);
+                const lastModified = moment(stats.mtime)
+                    .format('YYYY/MM/DD HH:mm:ss');
+                $('#modified-time')
+                    .text(lastModified);
             }
         });
-        fs.watchFile(this.sysHostsFile, (curr) => {
-            var lastModified = moment(curr.mtime).format('YYYY/MM/DD HH:mm:ss');
-            $('#modified-time').text(lastModified);
+        fs.watchFile(this.sysHostsFile, curr => {
+            const lastModified = moment(curr.mtime)
+                .format('YYYY/MM/DD HH:mm:ss');
+            $('#modified-time')
+                .text(lastModified);
         });
     }
 
@@ -257,21 +334,16 @@ class HostsDock {
      * bind elements event
      */
     bindEvents() {
-        // nav toggle
-        $('.toggle-title').on('click', (e) => {
-            var $this = $(e.currentTarget);
-            $this.parent().toggleClass('is-open');
+        // receive message from main process, to create new schema
+        ipc.on('new', () => {
+            this.showModalNew();
         });
 
-        // nav click
-        $('.nav-items').on('click', '.lk-hosts', (e) => this.navClickHandler(e));
-
-        // nav double click
-        $('.nav-items').on('dblclick', '.lk-hosts', (e) => {
-            var $this = $(e.currentTarget),
-                id = $this.attr('data-hosts-id'),
-                name = $this.find('span').text(),
-                url = $this.attr('data-hosts-url');
+        // receive message from main process, to apply a schema
+        ipc.on('apply', (event, data) => {
+            const id = data.id;
+            const name = data.name;
+            const url = data.url;
             this.applyHosts(id, name, url, (err, msg) => {
                 if (err) {
                     swal({
@@ -281,103 +353,248 @@ class HostsDock {
                     });
                 } else {
                     this.popNotification(msg);
-                    $('.applied').hide();
-                    $this.children('.applied').show();
+                    $('.applied')
+                        .hide();
+                    const link = $(`.nav-items a[data-hosts-id=${id}]`);
+                    link.children('.applied')
+                        .show();
+                    link.click();
                 }
-            })
+            });
         });
 
-        // new scheme click
-        $('#btnNew').on('click', () => {
-            this.showModalNew();
+        ipc.on('export', () => {
+            $('#btnExport').click();
         });
 
-        // edit scheme click
-        $('#btnEdit').on('click', () => {
-            var $currentActiveBtn = $('.nav-items li.active .lk-hosts');
-            if ($currentActiveBtn.length > 0) {
-                var id = $currentActiveBtn.attr('data-hosts-id');
-                var url = $currentActiveBtn.attr('data-hosts-url');
-                var name = $currentActiveBtn.find('span').text();
-                this.showModalEdit(id, name, url);
+        ipc.on('save-file', (event, data) => {
+            const id = data.id;
+            const url = data.url;
+            const fileName = data.fileName;
+            if (fileName) {
+                this.readHostsContent(id, url, (err, content) => {
+                    if (err) {
+                        swal({
+                            title: i18n.__('renderer.operation_failed'),
+                            text: err.message,
+                            type: 'error'
+                        });
+                    } else {
+                        fs.writeFile(fileName, content, err => {
+                            if (err) {
+                                swal({
+                                    title: i18n.__('renderer.operation_failed'),
+                                    text: err.message,
+                                    type: 'error'
+                                });
+                            } else {
+                                swal({
+                                    title: i18n.__('renderer.export_success'),
+                                    text: `${i18n.__('renderer.file_path')}: ${fileName}`,
+                                    type: 'success'
+                                });
+                            }
+                        });
+                    }
+                });
             }
         });
 
+        // nav toggle
+        $('.toggle-title')
+            .on('click', e => {
+                const $this = $(e.currentTarget);
+                $this.parent()
+                    .toggleClass('is-open');
+            });
+
+        // nav click
+        $('.nav-items')
+            .on('click', '.lk-hosts', e => this.navClickHandler(e));
+
+        // nav double click
+        $('.nav-items')
+            .on('dblclick', '.lk-hosts', e => {
+                const el = $(e.currentTarget);
+                el.click();
+                const id = el.attr('data-hosts-id');
+                if (id !== this.systemHostsId) {
+                    $('#btnApply').click();
+                }
+            });
+
+        $('.nav-items')
+            .on('contextmenu', '.lk-hosts', e => {
+                const target = e.currentTarget;
+                $(target).click();
+                const items = [{
+                    title: i18n.__('renderer.btnRefresh'),
+                    icon: 'fa fa-refresh',
+                    fn: () => {
+                        $('#btnRefresh').click();
+                    }
+                }, {
+                    title: i18n.__('renderer.btnExport'),
+                    icon: 'fa fa-sign-out',
+                    fn: () => {
+                        $('#btnExport').click();
+                    }
+                }];
+
+                if ($(target).attr('data-hosts-id') !== this.systemHostsId) {
+                    items.push({
+                        title: i18n.__('renderer.btnEdit'),
+                        icon: 'fa fa-pencil',
+                        fn: () => {
+                            $('#btnEdit').click();
+                        }
+                    }, {
+                        title: i18n.__('renderer.btnDelete'),
+                        icon: 'fa fa-trash-o',
+                        fn: () => {
+                            $('#btnDelete').click();
+                        }
+                    }, {}, {
+                        title: i18n.__('renderer.btnApply'),
+                        icon: 'fa fa-check',
+                        fn: () => {
+                            $('#btnApply').click();
+                        }
+                    });
+                } else {
+                    items.push({}, {
+                        title: i18n.__('renderer.btnSysTxt'),
+                        icon: 'fa fa-folder-open-o',
+                        fn: () => {
+                            $('#btnSys').click();
+                        }
+                    });
+                }
+                basicContext.show(items, e.originalEvent);
+            });
+
+        // new scheme click
+        $('#btnNew')
+            .on('click', () => {
+                this.showModalNew();
+            });
+
+        // edit scheme click
+        $('#btnEdit')
+            .on('click', () => {
+                const $currentActiveBtn = $('.nav-items li.active .lk-hosts');
+                if ($currentActiveBtn.length > 0) {
+                    const id = $currentActiveBtn.attr('data-hosts-id');
+                    const url = $currentActiveBtn.attr('data-hosts-url');
+                    const name = $currentActiveBtn.find('span')
+                        .text();
+                    this.showModalEdit(id, name, url);
+                }
+            });
+
         // refresh click
-        $('#btnRefresh').on('click', (e) => this.refreshClickHandler(e));
+        $('#btnRefresh')
+            .on('click', e => this.refreshClickHandler(e));
+
+        // export click
+        $('#btnExport')
+            .on('click', e => this.exportClickHandler(e));
 
         // delete click
-        $('#btnDelete').on('click', () => this.deleteClickHandler());
+        $('#btnDelete')
+            .on('click', () => this.deleteClickHandler());
 
         // apply click
-        $('#btnApply').on('click', (e) => this.applyClickHandler(e));
+        $('#btnApply')
+            .on('click', e => this.applyClickHandler(e));
+
+        // check click
+        $('#btnCheck')
+            .on('click', e => this.checkClickHandler(e));
+
+        // open sys folder click
+        $('#btnSys')
+            .on('click', e => this.sysClickHandler(e));
 
         // undo click
-        $('#btnUndo').on('click', ()=> {
-            // add command.name, the purpose is to determine artificially modified when a change event is triggered
-            this.editor.curOp = {
-                command: {name: 'undoClick'}
-            };
-            this.editor.undo();
-            this.editor.curOp = null;
-        });
+        $('#btnUndo')
+            .on('click', () => {
+                // add command.name, the purpose is to determine artificially modified when a change event is triggered
+                this.editor.curOp = {
+                    command: { name: 'undoClick' }
+                };
+                this.editor.undo();
+                this.editor.curOp = null;
+            });
 
         // redo click
-        $('#btnRedo').on('click', ()=> {
-            // add command.name, the purpose is to determine artificially modified when a change event is triggered
-            this.editor.curOp = {
-                command: {name: 'redoClick'}
-            };
-            this.editor.redo();
-            this.editor.curOp = null;
-        });
+        $('#btnRedo')
+            .on('click', () => {
+                // add command.name, the purpose is to determine artificially modified when a change event is triggered
+                this.editor.curOp = {
+                    command: { name: 'redoClick' }
+                };
+                this.editor.redo();
+                this.editor.curOp = null;
+            });
 
         // copy click
-        $('#btnCopy').on('click', ()=> {
-            this.editor.focus();
-            document.execCommand('copy');
-        });
+        $('#btnCopy')
+            .on('click', () => {
+                this.editor.focus();
+                document.execCommand('copy');
+            });
 
         // cut click
-        $('#btnCut').on('click', ()=> {
-            this.editor.focus();
-            document.execCommand('cut');
-        });
+        $('#btnCut')
+            .on('click', () => {
+                this.editor.focus();
+                document.execCommand('cut');
+            });
 
         // paste click
-        $('#btnPaste').on('click', ()=> {
-            this.editor.focus();
-            document.execCommand('paste')
-        });
+        $('#btnPaste')
+            .on('click', () => {
+                this.editor.focus();
+                document.execCommand('paste');
+            });
 
         // search click
-        $('#btnSearch').on('click', ()=> {
-            ace.require(["ace/ext/searchbox"], (obj) => {
-                new obj.Search(this.editor);
+        $('#btnSearch')
+            .on('click', () => {
+                ace.require(['ace/ext/searchbox'], obj => {
+                    new obj.Search(this.editor);
+                });
             });
-        });
 
         // replace click
-        $('#btnReplace').on('click', ()=> {
-            ace.require(["ace/ext/searchbox"], (obj) => {
-                new obj.Search(this.editor, true);
+        $('#btnReplace')
+            .on('click', () => {
+                ace.require(['ace/ext/searchbox'], obj => {
+                    new obj.Search(this.editor, true);
+                });
             });
-        });
+
+        $('.top')
+            .on('click', () => {
+                this.editor.session.setScrollTop(0);
+            });
     }
 
     /**
      * timer, listen for cache, write to file if cache is not null
      */
     contentChange() {
-        setInterval(()=> {
+        setInterval(() => {
             if (this.buffer !== null) {
-                let id = this.buffer.id;
-                let content = this.buffer.content;
+                const id = this.buffer.id;
+                const content = this.buffer.content;
+
                 // reset cache to null
                 this.buffer = null;
+
                 // write changes to file during the interval
-                this.writeHostsContent(id, content, (err)=> {
-                })
+                this.writeHostsContent(id, content, err => { });
             }
         }, this.bufferTimeInterval);
     }
@@ -393,7 +610,8 @@ class HostsDock {
             callback = url;
             url = undefined;
         }
-        var data = '';
+        let data = '';
+
         // local file
         if (!url) {
             let filePath;
@@ -402,31 +620,31 @@ class HostsDock {
             } else {
                 filePath = path.resolve(this.hostsDockDir, id);
             }
-            let rs = fs.createReadStream(filePath, 'utf8');
-            rs.on('data', (chunk)=> {
+            const rs = fs.createReadStream(filePath, 'utf8');
+            rs.on('data', chunk => {
                 data += chunk.toString();
             });
 
-            rs.on('end', ()=> {
+            rs.on('end', () => {
                 callback(null, data);
             });
 
-            rs.on('error', (err)=> {
+            rs.on('error', err => {
                 callback(err);
             });
         } else {
             // local file
             if (url.startsWith('\\\\')) {
-                let rs = fs.createReadStream(url, 'utf8');
-                rs.on('data', (chunk)=> {
+                const rs = fs.createReadStream(url, 'utf8');
+                rs.on('data', chunk => {
                     data += chunk.toString();
                 });
 
-                rs.on('end', ()=> {
+                rs.on('end', () => {
                     callback(null, data);
                 });
 
-                rs.on('error', (err)=> {
+                rs.on('error', err => {
                     callback(err);
                 });
             } else {
@@ -437,7 +655,7 @@ class HostsDock {
                     } else {
                         callback(null, body);
                     }
-                })
+                });
             }
         }
     }
@@ -449,17 +667,17 @@ class HostsDock {
      * @param callback callback function
      */
     writeHostsContent(id, content, callback) {
-        var filePath;
+        let filePath;
         if (id === this.systemHostsId) {
             filePath = this.sysHostsFile;
         } else {
             filePath = path.resolve(this.hostsDockDir, id);
         }
-        var ws = fs.createWriteStream(filePath, 'utf8');
-        ws.write(content, ()=> {
+        const ws = fs.createWriteStream(filePath, 'utf8');
+        ws.write(content, () => {
             callback(null);
         });
-        ws.on('error', (err)=> {
+        ws.on('error', err => {
             callback(err);
         });
     }
@@ -471,7 +689,7 @@ class HostsDock {
      * @param callback callback function
      */
     copyHostsContent(fromId, toId, callback) {
-        var pathFrom, pathTo;
+        let pathFrom, pathTo;
         if (fromId === this.systemHostsId) {
             pathFrom = this.sysHostsFile;
         } else {
@@ -482,16 +700,16 @@ class HostsDock {
         } else {
             pathTo = path.resolve(this.hostsDockDir, toId);
         }
-        var rs = fs.createReadStream(pathFrom, 'utf8');
-        var ws = fs.createWriteStream(pathTo, 'utf8');
+        const rs = fs.createReadStream(pathFrom, 'utf8');
+        const ws = fs.createWriteStream(pathTo, 'utf8');
         rs.pipe(ws);
-        rs.on('end', ()=> {
+        rs.on('end', () => {
             callback(null);
         });
-        rs.on('error', (err)=> {
+        rs.on('error', err => {
             callback(err);
         });
-        ws.on('error', (err)=> {
+        ws.on('error', err => {
             callback(err);
         });
     }
@@ -510,30 +728,50 @@ class HostsDock {
      */
     flushDns() {
         if (this.platForm === 'win32') {
-            cp.exec('ipconfig /flushdns', (err) => {
-            });
+            cp.exec('ipconfig /flushdns', err => { });
         } else if (this.platForm === 'linux') {
-            cp.exec('rcnscd restart', (err) => {
-            });
+            cp.exec('rcnscd restart', err => { });
         } else if (this.platForm === 'darwin') {
-            cp.exec('killall -HUP mDNSResponder', (err) => {
-            });
+            cp.exec('killall -HUP mDNSResponder', err => { });
         }
     }
 
     /**
      * reset show/hidden for buttons
-     * @param id
      */
-    resetBtnState(id) {
+    resetBtnState(id, url) {
         if (id === this.systemHostsId) {
-            $('#btnEdit').hide();
-            $('#btnDelete').hide();
-            $('#btnApply').hide();
+            $('#btnEdit')
+                .hide();
+            $('#btnCheck')
+                .hide();
+            $('#btnDelete')
+                .hide();
+            $('#btnApply')
+                .hide();
+            $('#btnSys')
+                .show();
+            $('#editor-tool-dynamic')
+                .hide();
         } else {
-            $('#btnEdit').show();
-            $('#btnDelete').show();
-            $('#btnApply').show();
+            $('#btnEdit')
+                .show();
+            $('#btnCheck')
+                .show();
+            $('#btnDelete')
+                .show();
+            $('#btnApply')
+                .show();
+            $('#btnSys')
+                .hide();
+            
+            if (url) {
+                $('#editor-tool-dynamic')
+                    .hide();
+            } else {
+                $('#editor-tool-dynamic')
+                    .show();
+            }
         }
     }
 
@@ -541,7 +779,7 @@ class HostsDock {
      * new scheme
      */
     showModalNew() {
-        var errShowing = false,
+        let errShowing = false,
             that = this;
         swal.withForm({
             title: i18n.__('renderer.new_scheme'),
@@ -551,22 +789,22 @@ class HostsDock {
             confirmButtonText: i18n.__('renderer.new_scheme_submit'),
             cancelButtonText: i18n.__('renderer.cancel'),
             closeOnConfirm: false,
-            animation: 'slide-from-top',
             formFields: [
-                {id: 'txtName', placeholder: i18n.__('renderer.scheme_name')},
-                {id: 'txtUrl', placeholder: i18n.__('renderer.scheme_address')}
+                { id: 'txtName', placeholder: i18n.__('renderer.scheme_name') },
+                { id: 'txtUrl', placeholder: i18n.__('renderer.scheme_address') }
             ]
         }, function (isConfirm) {
-            var $errEl = $('.sa-error-container');
-            var name = this.swalForm.txtName.trim();
-            var url = this.swalForm.txtUrl.trim();
+            const $errEl = $('.sa-error-container');
+            const name = this.swalForm.txtName.trim();
+            const url = this.swalForm.txtUrl.trim();
             if (isConfirm) {
                 if (!name) {
                     if (!errShowing) {
                         errShowing = true;
-                        $errEl.find('p').text(i18n.__('renderer.scheme_name_empty'));
+                        $errEl.find('p')
+                            .text(i18n.__('renderer.scheme_name_empty'));
                         $errEl.addClass('show');
-                        setTimeout(()=> {
+                        setTimeout(() => {
                             $errEl.removeClass('show');
                             errShowing = false;
                         }, 2000);
@@ -576,18 +814,20 @@ class HostsDock {
                 if (url && !that.urlPattern.test(url)) {
                     if (!errShowing) {
                         errShowing = true;
-                        $errEl.find('p').text(i18n.__('renderer.scheme_address_err'));
+                        $errEl.find('p')
+                            .text(i18n.__('renderer.scheme_address_err'));
                         $errEl.addClass('show');
-                        setTimeout(()=> {
+                        setTimeout(() => {
                             $errEl.removeClass('show');
                             errShowing = false;
                         }, 2000);
                     }
                     return false;
                 }
-                fs.readFile(that.configFile, 'utf8', (err, data)=> {
+                fs.readFile(that.configFile, 'utf8', (err, data) => {
                     if (err) {
-                        $('.swal-form').remove();
+                        $('.swal-form')
+                            .remove();
                         swal({
                             title: i18n.__('renderer.submit_failed'),
                             text: err.message,
@@ -595,16 +835,16 @@ class HostsDock {
                         });
                     } else {
                         let isExists = false;
-                        var config = JSON.parse(data);
+                        const config = JSON.parse(data);
                         if (!url) {
-                            config.localHosts.some((item)=> {
-                                if (item["name"] === name) {
+                            config.localHosts.some(item => {
+                                if (item.name === name) {
                                     isExists = true;
                                 }
                             });
                         } else {
-                            config.remoteHosts.some((item)=> {
-                                if (item["name"] === name) {
+                            config.remoteHosts.some(item => {
+                                if (item.name === name) {
                                     isExists = true;
                                 }
                             });
@@ -612,92 +852,109 @@ class HostsDock {
                         if (isExists) {
                             if (!errShowing) {
                                 errShowing = true;
-                                $errEl.find('p').text(i18n.__('renderer.scheme_name_exists'));
+                                $errEl.find('p')
+                                    .text(i18n.__('renderer.scheme_name_exists'));
                                 $errEl.addClass('show');
-                                setTimeout(()=> {
+                                setTimeout(() => {
                                     $errEl.removeClass('show');
                                     errShowing = false;
                                 }, 2000);
                             }
                             return false;
+                        }
+                        const id = HostsDock.getUid();
+                        if (!url) {
+                            const now = moment(Date.now())
+                                .format('YYYY/MM/DD HH:mm:ss');
+                            that.writeHostsContent(id, `# HostsDock - Created at ${now}\r\n`, err => {
+                                if (err) {
+                                    swal({
+                                        title: i18n.__('renderer.submit_failed'),
+                                        text: err.message,
+                                        type: 'error'
+                                    });
+                                    $('.swal-form')
+                                        .remove();
+                                } else {
+                                    config.localHosts.push({
+                                        id,
+                                        name,
+                                        file: id
+                                    });
+                                    fs.writeFile(that.configFile, JSON.stringify(config, null, 4), 'utf8', err => {
+                                        if (err) {
+                                            swal({
+                                                title: i18n.__('renderer.submit_failed'),
+                                                text: err.message,
+                                                type: 'error'
+                                            });
+                                            $('.swal-form')
+                                                .remove();
+                                        } else {
+                                            const $li = $(`<li><a class='lk-hosts' data-hosts-id='${id}'><i class='applied fa fa-check' title='${i18n.__('renderer.applied')}'></i><i class='fa fa-file-text-o'></i> <span>${name}</span><i class='loading fa fa-spinner fa-spin' title='${i18n.__('renderer.loading')}'></i></a></li>`);
+                                            $('.nav-local')
+                                                .append($li);
+                                            $li.children('.lk-hosts')
+                                                .click();
+                                            swal({
+                                                title: i18n.__('renderer.submit_successfully'),
+                                                text: i18n.__('renderer.create_local_successfully', name),
+                                                type: 'success',
+                                                showConfirmButton: false,
+                                                timer: 1500
+                                            });
+                                            $('.swal-form')
+                                                .remove();
+
+                                            // update tray
+                                            ipc.send('tray', config);
+                                        }
+                                    });
+                                }
+                            });
                         } else {
-                            let id = HostsDock.getUid();
-                            if (!url) {
-                                let now = moment(Date.now()).format('YYYY/MM/DD HH:mm:ss');
-                                that.writeHostsContent(id, `# HostsDock - Created at ${now}\r\n`, (err)=> {
-                                    if (err) {
-                                        swal({
-                                            title: i18n.__('renderer.submit_failed'),
-                                            text: err.message,
-                                            type: 'error'
-                                        });
-                                        $('.swal-form').remove();
-                                    } else {
-                                        config.localHosts.push({
-                                            id: id,
-                                            name: name,
-                                            file: id
-                                        });
-                                        fs.writeFile(that.configFile, JSON.stringify(config, null, 4), 'utf8', (err)=> {
-                                            if (err) {
-                                                swal({
-                                                    title: i18n.__('renderer.submit_failed'),
-                                                    text: err.message,
-                                                    type: 'error'
-                                                });
-                                                $('.swal-form').remove();
-                                            } else {
-                                                var $li = $(`<li><a class='lk-hosts' data-hosts-id='${id}'><i class='applied fa fa-check' title='${i18n.__('renderer.applied')}'></i><i class='fa fa-file-text-o'></i> <span>${name}</span><i class='loading fa fa-spinner fa-spin' title='${i18n.__('renderer.loading')}'></i></a></li>`);
-                                                $('.nav-local').append($li);
-                                                $li.children('.lk-hosts').click();
-                                                swal({
-                                                    title: i18n.__('renderer.submit_successfully'),
-                                                    text: i18n.__('renderer.create_local_successfully', name),
-                                                    type: 'success',
-                                                    showConfirmButton: false,
-                                                    timer: 1500
-                                                });
-                                                $('.swal-form').remove();
-                                            }
-                                        })
-                                    }
-                                });
-                            } else {
-                                config.remoteHosts.push({
-                                    id: id,
-                                    name: name,
-                                    url: url
-                                });
-                                fs.writeFile(that.configFile, JSON.stringify(config, null, 4), 'utf8', (err)=> {
-                                    if (err) {
-                                        swal({
-                                            title: i18n.__('renderer.submit_failed'),
-                                            text: err.message,
-                                            type: 'error'
-                                        });
-                                        $('.swal-form').remove();
-                                    } else {
-                                        var $li = $(`<li><a class='lk-hosts' data-hosts-id='${id}' data-hosts-url='${url}'><i class='applied fa fa-check' title='${i18n.__('renderer.applied')}'></i><i class='fa fa-globe'></i> <span>${name}</span><i class='loading fa fa-spinner fa-spin' title='${i18n.__('renderer.loading')}'></i></a></li>`);
-                                        $('.nav-remote').append($li);
-                                        $li.children('.lk-hosts').click();
-                                        swal({
-                                            title: i18n.__('renderer.submit_successfully'),
-                                            text: i18n.__('renderer.create_remote_successfully', name),
-                                            type: 'success',
-                                            showConfirmButton: false,
-                                            timer: 1500
-                                        });
-                                        $('.swal-form').remove();
-                                    }
-                                })
-                            }
+                            config.remoteHosts.push({
+                                id,
+                                name,
+                                url
+                            });
+                            fs.writeFile(that.configFile, JSON.stringify(config, null, 4), 'utf8', err => {
+                                if (err) {
+                                    swal({
+                                        title: i18n.__('renderer.submit_failed'),
+                                        text: err.message,
+                                        type: 'error'
+                                    });
+                                    $('.swal-form')
+                                        .remove();
+                                } else {
+                                    const $li = $(`<li><a class='lk-hosts' data-hosts-id='${id}' data-hosts-url='${url}'><i class='applied fa fa-check' title='${i18n.__('renderer.applied')}'></i><i class='fa fa-globe'></i> <span>${name}</span><i class='loading fa fa-spinner fa-spin' title='${i18n.__('renderer.loading')}'></i></a></li>`);
+                                    $('.nav-remote')
+                                        .append($li);
+                                    $li.children('.lk-hosts')
+                                        .click();
+                                    swal({
+                                        title: i18n.__('renderer.submit_successfully'),
+                                        text: i18n.__('renderer.create_remote_successfully', name),
+                                        type: 'success',
+                                        showConfirmButton: false,
+                                        timer: 1500
+                                    });
+                                    $('.swal-form')
+                                        .remove();
+
+                                    // update tray
+                                    ipc.send('tray', config);
+                                }
+                            });
                         }
                     }
-                })
+                });
             } else {
-                $('.swal-form').remove();
+                $('.swal-form')
+                    .remove();
             }
-        })
+        });
     }
 
     /**
@@ -707,11 +964,11 @@ class HostsDock {
      * @param oldUrl current url
      */
     showModalEdit(id, oldName, oldUrl) {
-        var errShowing = false,
+        let errShowing = false,
             that = this;
-        var forms = [{id: 'txtName', placeholder: i18n.__('renderer.scheme_name'), value: oldName}];
+        const forms = [{ id: 'txtName', placeholder: i18n.__('renderer.scheme_name'), value: oldName }];
         if (oldUrl) {
-            forms.push({id: 'txtUrl', placeholder: i18n.__('renderer.scheme_address'), value: oldUrl});
+            forms.push({ id: 'txtUrl', placeholder: i18n.__('renderer.scheme_address'), value: oldUrl });
         }
         swal.withForm({
             title: i18n.__('renderer.edit_scheme'),
@@ -721,12 +978,11 @@ class HostsDock {
             confirmButtonText: i18n.__('renderer.edit_scheme_save'),
             cancelButtonText: i18n.__('renderer.cancel'),
             closeOnConfirm: false,
-            animation: 'slide-from-top',
             formFields: forms
         }, function (isConfirm) {
-            var $errEl = $('.sa-error-container');
-            var name = this.swalForm.txtName.trim();
-            var url;
+            const $errEl = $('.sa-error-container');
+            const name = this.swalForm.txtName.trim();
+            let url;
             if (oldUrl) {
                 url = this.swalForm.txtUrl.trim();
             }
@@ -734,9 +990,10 @@ class HostsDock {
                 if (!name) {
                     if (!errShowing) {
                         errShowing = true;
-                        $errEl.find('p').text(i18n.__('renderer.scheme_name_empty'));
+                        $errEl.find('p')
+                            .text(i18n.__('renderer.scheme_name_empty'));
                         $errEl.addClass('show');
-                        setTimeout(()=> {
+                        setTimeout(() => {
                             $errEl.removeClass('show');
                             errShowing = false;
                         }, 2000);
@@ -746,21 +1003,23 @@ class HostsDock {
                 if (oldUrl && !url) {
                     if (!errShowing) {
                         errShowing = true;
-                        $errEl.find('p').text(i18n.__('renderer.scheme_address_empty'));
+                        $errEl.find('p')
+                            .text(i18n.__('renderer.scheme_address_empty'));
                         $errEl.addClass('show');
-                        setTimeout(()=> {
+                        setTimeout(() => {
                             $errEl.removeClass('show');
                             errShowing = false;
                         }, 2000);
                     }
                     return false;
                 }
-                if (url && !urlPattern.test(url)) {
+                if (url && !that.urlPattern.test(url)) {
                     if (!errShowing) {
                         errShowing = true;
-                        $errEl.find('p').text(i18n.__('renderer.scheme_address_err'));
+                        $errEl.find('p')
+                            .text(i18n.__('renderer.scheme_address_err'));
                         $errEl.addClass('show');
-                        setTimeout(()=> {
+                        setTimeout(() => {
                             $errEl.removeClass('show');
                             errShowing = false;
                         }, 2000);
@@ -768,9 +1027,10 @@ class HostsDock {
                     return false;
                 }
                 if (name !== oldName) {
-                    fs.readFile(that.configFile, 'utf8', (err, data)=> {
+                    fs.readFile(that.configFile, 'utf8', (err, data) => {
                         if (err) {
-                            $('.swal-form').remove();
+                            $('.swal-form')
+                                .remove();
                             swal({
                                 title: i18n.__('renderer.submit_failed'),
                                 text: err.message,
@@ -778,16 +1038,16 @@ class HostsDock {
                             });
                         } else {
                             let isExists = false;
-                            let config = JSON.parse(data);
+                            const config = JSON.parse(data);
                             if (!oldUrl) {
-                                config.localHosts.some((item)=> {
-                                    if (item["name"] === name) {
+                                config.localHosts.some(item => {
+                                    if (item.name === name) {
                                         isExists = true;
                                     }
                                 });
                             } else {
-                                config.remoteHosts.some((item)=> {
-                                    if (item["name"] === name) {
+                                config.remoteHosts.some(item => {
+                                    if (item.name === name) {
                                         isExists = true;
                                     }
                                 });
@@ -795,68 +1055,74 @@ class HostsDock {
                             if (isExists) {
                                 if (!errShowing) {
                                     errShowing = true;
-                                    $errEl.find('p').text(i18n.__('renderer.scheme_name_exists'));
+                                    $errEl.find('p')
+                                        .text(i18n.__('renderer.scheme_name_exists'));
                                     $errEl.addClass('show');
-                                    setTimeout(()=> {
+                                    setTimeout(() => {
                                         $errEl.removeClass('show');
                                         errShowing = false;
                                     }, 2000);
                                 }
                                 return false;
+                            }
+                            let hostsJson,
+                                hostsArray;
+                            if (oldUrl) {
+                                hostsArray = config.remoteHosts;
                             } else {
-                                let hostsJson,
-                                    hostsArray;
-                                if (oldUrl) {
-                                    hostsArray = config.remoteHosts;
-                                } else {
-                                    hostsArray = config.localHosts;
+                                hostsArray = config.localHosts;
+                            }
+                            hostsArray.forEach(item => {
+                                if (item.id === id) {
+                                    hostsJson = item;
+                                    return false;
                                 }
-                                hostsArray.forEach((item)=> {
-                                    if (item["id"] === id) {
-                                        hostsJson = item;
-                                        return false;
+                            });
+                            if (hostsJson) {
+                                hostsJson.name = name;
+                                if (oldUrl) {
+                                    hostsJson.url = url;
+                                }
+                                fs.writeFile(that.configFile, JSON.stringify(config, null, 4), 'utf8', err => {
+                                    if (err) {
+                                        swal({
+                                            title: i18n.__('renderer.submit_failed'),
+                                            text: err.message,
+                                            type: 'error'
+                                        });
+                                        $('.swal-form')
+                                            .remove();
+                                    } else {
+                                        const $btn = $(`.nav-items a[data-hosts-id=${id}]`);
+                                        $btn.find('span')
+                                            .text(name);
+                                        if (oldUrl) {
+                                            $btn.attr('data-hosts-url', url);
+                                        }
+                                        swal({
+                                            title: i18n.__('renderer.save_successfully'),
+                                            text: i18n.__('renderer.save_successfully_desc'),
+                                            type: 'success',
+                                            showConfirmButton: false,
+                                            timer: 1500
+                                        });
+                                        $('.swal-form')
+                                            .remove();
+
+                                        // update tray
+                                        ipc.send('tray', config);
                                     }
                                 });
-                                if (hostsJson) {
-                                    hostsJson.name = name;
-                                    if (oldUrl) {
-                                        hostsJson.url = url;
-                                    }
-                                    fs.writeFile(that.configFile, JSON.stringify(config, null, 4), 'utf8', (err)=> {
-                                        if (err) {
-                                            swal({
-                                                title: i18n.__('renderer.submit_failed'),
-                                                text: err.message,
-                                                type: 'error'
-                                            });
-                                            $('.swal-form').remove();
-                                        } else {
-                                            let $btn = $('.nav-items a[data-hosts-id=' + id + ']');
-                                            $btn.find('span').text(name);
-                                            if (oldUrl) {
-                                                $btn.attr('data-hosts-url', url);
-                                            }
-                                            swal({
-                                                title: i18n.__('renderer.save_successfully'),
-                                                text: i18n.__('renderer.save_successfully_desc'),
-                                                type: 'success',
-                                                showConfirmButton: false,
-                                                timer: 1500
-                                            });
-                                            $('.swal-form').remove();
-                                        }
-                                    })
-                                } else {
-                                    swal({
-                                        title: i18n.__('renderer.submit_failed'),
-                                        text: err.message,
-                                        type: 'error'
-                                    });
-                                    $('.swal-form').remove();
-                                }
+                            } else {
+                                swal({
+                                    title: i18n.__('renderer.submit_failed'),
+                                    type: 'error'
+                                });
+                                $('.swal-form')
+                                    .remove();
                             }
                         }
-                    })
+                    });
                 } else {
                     // actually not modified
                     if ((oldUrl && url === oldUrl) || !oldUrl) {
@@ -867,38 +1133,43 @@ class HostsDock {
                             showConfirmButton: false,
                             timer: 1500
                         });
-                        $('.swal-form').remove();
+                        $('.swal-form')
+                            .remove();
                     } else {
-                        fs.readFile(that.configFile, 'utf8', (err, data)=> {
+                        fs.readFile(that.configFile, 'utf8', (err, data) => {
                             if (err) {
-                                $('.swal-form').remove();
+                                $('.swal-form')
+                                    .remove();
                                 swal({
                                     title: i18n.__('renderer.submit_failed'),
                                     text: err.message,
                                     type: 'error'
                                 });
                             } else {
-                                let config = JSON.parse(data);
+                                const config = JSON.parse(data);
                                 let hostsJson;
-                                config.remoteHosts.forEach((item)=> {
-                                    if (item["id" === id]) {
+                                config.remoteHosts.forEach(item => {
+                                    if (item.id === id) {
                                         hostsJson = item;
                                         return false;
                                     }
                                 });
                                 if (hostsJson) {
                                     hostsJson.url = url;
-                                    fs.writeFile(that.configFile, JSON.stringify(config, null, 4), 'utf8', (err)=> {
+                                    fs.writeFile(that.configFile, JSON.stringify(config, null, 4), 'utf8', err => {
                                         if (err) {
                                             swal({
                                                 title: i18n.__('renderer.submit_failed'),
                                                 text: err.message,
                                                 type: 'error'
                                             });
-                                            $('.swal-form').remove();
+                                            $('.swal-form')
+                                                .remove();
                                         } else {
-                                            let $btn = $('.nav-items a[data-hosts-id=' + id + ']');
-                                            $btn.attr('data-hosts-url', url).find('span').text(name);
+                                            const $btn = $(`.nav-items a[data-hosts-id=${id}]`);
+                                            $btn.attr('data-hosts-url', url)
+                                                .find('span')
+                                                .text(name);
                                             swal({
                                                 title: i18n.__('renderer.save_successfully'),
                                                 text: i18n.__('renderer.save_successfully_desc'),
@@ -906,26 +1177,30 @@ class HostsDock {
                                                 showConfirmButton: false,
                                                 timer: 1500
                                             });
-                                            $('.swal-form').remove();
+                                            $('.swal-form')
+                                                .remove();
+
+                                            // update tray
+                                            ipc.send('tray', config);
                                         }
-                                    })
+                                    });
                                 } else {
                                     swal({
                                         title: i18n.__('renderer.submit_failed'),
-                                        text: err.message,
                                         type: 'error'
                                     });
-                                    $('.swal-form').remove();
+                                    $('.swal-form')
+                                        .remove();
                                 }
-
                             }
-                        })
+                        });
                     }
                 }
             } else {
-                $('.swal-form').remove();
+                $('.swal-form')
+                    .remove();
             }
-        })
+        });
     }
 
     /**
@@ -934,25 +1209,32 @@ class HostsDock {
     changeHandler() {
         // if has command.name, indicate that the content changes are caused by the user action, instead of program
         if (this.editor.curOp && this.editor.curOp.command.name) {
-            var id = $('.nav-items li.active .lk-hosts').attr('data-hosts-id');
-            var content = this.editor.getValue();
+            const id = $('.nav-items li.active .lk-hosts')
+                .attr('data-hosts-id');
+            const content = this.editor.getValue();
+
             // 先将当前内容放入缓存，到时批量写入
-            this.buffer = {id: id, content: content};
+            this.buffer = { id, content };
         }
+
         // undo/redo will handle after changed, so must add to async queue
-        setImmediate(()=> {
-            var um = this.editor.session.getUndoManager();
+        setImmediate(() => {
+            const um = this.editor.session.getUndoManager();
             if (um.hasUndo()) {
-                $('#btnUndo').removeAttr('disabled');
+                $('#btnUndo')
+                    .removeAttr('disabled');
             } else {
-                $('#btnUndo').attr('disabled', 'disabled');
+                $('#btnUndo')
+                    .attr('disabled', 'disabled');
             }
             if (um.hasRedo()) {
-                $('#btnRedo').removeAttr('disabled');
+                $('#btnRedo')
+                    .removeAttr('disabled');
             } else {
-                $('#btnRedo').attr('disabled', 'disabled');
+                $('#btnRedo')
+                    .attr('disabled', 'disabled');
             }
-        })
+        });
     }
 
     /**
@@ -960,27 +1242,37 @@ class HostsDock {
      * @param e event object
      */
     navClickHandler(e) {
-        var $this = $(e.currentTarget),
+        let $this = $(e.currentTarget),
             $parent = $this.parent(),
             id = $this.attr('data-hosts-id'),
             url = $this.attr('data-hosts-url');
         if (!$parent.hasClass('active')) {
-            $('.nav-items li.active').removeClass('active');
+            $('.nav-items li.active')
+                .removeClass('active');
             $parent.addClass('active');
-            $('.loading').hide();
-            $this.children('.loading').show();
-            var timeStart = Date.now();
+            $('.loading')
+                .hide();
+            $this.children('.loading')
+                .show();
+            const timeStart = Date.now();
             this.editor.setReadOnly(true);
             this.editor.session.setValue('', -1);
-            $('#btnUndo').attr('disabled', 'disabled');
-            $('#btnRedo').attr('disabled', 'disabled');
-            $('#btnRefresh i').removeClass('fa-spin');
-            $('#btnRefresh').attr('disabled', 'disabled');
-            this.resetBtnState(id);
+            this.editor.session.setScrollTop(0);
+            $('#hosts-content').addClass('no-comment');
+            $('#btnUndo')
+                .attr('disabled', 'disabled');
+            $('#btnRedo')
+                .attr('disabled', 'disabled');
+            $('#btnRefresh i')
+                .removeClass('fa-spin');
+            $('#btnRefresh')
+                .attr('disabled', 'disabled');
+            this.resetBtnState(id, url);
             if (!url) {
                 this.readHostsContent(id, (err, data) => {
                     // TODO:no longer perform callback when navigation changed
-                    if ($('.nav-items li.active .lk-hosts').attr('data-hosts-id') === id) {
+                    if ($('.nav-items li.active .lk-hosts')
+                        .attr('data-hosts-id') === id) {
                         if (err) {
                             swal({
                                 title: i18n.__('renderer.load_hosts_failed'),
@@ -988,28 +1280,37 @@ class HostsDock {
                                 type: 'error'
                             });
                         } else {
-                            this.editor.setReadOnly(false);
                             this.editor.session.setValue(data, -1);
+                            if (id !== this.systemHostsId) {
+                                this.editor.setReadOnly(false);
+                                $('#hosts-content').removeClass('no-comment');
+                            }
                         }
-                        $('#btnRefresh').removeAttr('disabled');
+                        $('#btnRefresh')
+                            .removeAttr('disabled');
+
                         // clear undo/redo list
-                        this.editor.session.getUndoManager().reset();
-                        var timeEnd = Date.now();
+                        this.editor.session.getUndoManager()
+                            .reset();
+                        const timeEnd = Date.now();
                         if (timeEnd - timeStart > this.loadingMin) {
-                            $this.children('.loading').hide();
+                            $this.children('.loading')
+                                .hide();
                         } else {
-                            var timeSpan = this.loadingMin - (timeEnd - timeStart);
-                            setTimeout(()=> {
-                                $this.children('.loading').hide();
+                            const timeSpan = this.loadingMin - (timeEnd - timeStart);
+                            setTimeout(() => {
+                                $this.children('.loading')
+                                    .hide();
                             }, timeSpan);
                         }
                     }
-                })
+                });
             } else {
                 this.editor.setReadOnly(true);
-                this.readHostsContent(id, url, (err, data)=> {
+                this.readHostsContent(id, url, (err, data) => {
                     // TODO:no longer perform callback when navigation changed
-                    if ($('.nav-items li.active .lk-hosts').attr('data-hosts-id') === id) {
+                    if ($('.nav-items li.active .lk-hosts')
+                        .attr('data-hosts-id') === id) {
                         if (err) {
                             swal({
                                 title: i18n.__('renderer.get_remote_failed'),
@@ -1019,20 +1320,25 @@ class HostsDock {
                         } else {
                             this.editor.session.setValue(data, -1);
                         }
-                        $('#btnRefresh').removeAttr('disabled');
+                        $('#btnRefresh')
+                            .removeAttr('disabled');
+
                         // clear undo/redo list
-                        this.editor.session.getUndoManager().reset();
-                        var timeEnd = Date.now();
+                        this.editor.session.getUndoManager()
+                            .reset();
+                        const timeEnd = Date.now();
                         if (timeEnd - timeStart > this.loadingMin) {
-                            $this.children('.loading').hide();
+                            $this.children('.loading')
+                                .hide();
                         } else {
-                            var timeSpan = this.loadingMin - (timeEnd - timeStart);
-                            setTimeout(()=> {
-                                $this.children('.loading').hide();
+                            const timeSpan = this.loadingMin - (timeEnd - timeStart);
+                            setTimeout(() => {
+                                $this.children('.loading')
+                                    .hide();
                             }, timeSpan);
                         }
                     }
-                })
+                });
             }
         }
     }
@@ -1048,34 +1354,37 @@ class HostsDock {
         // just non-system hosts
         if (id !== this.systemHostsId) {
             if (url) {
-                this.readHostsContent(id, url, (err, data)=> {
+                this.readHostsContent(id, url, (err, data) => {
                     if (err) {
                         callback(err);
                     } else {
-                        var ws = fs.createWriteStream(this.sysHostsFile);
-                        ws.write(data, 'utf8', ()=> {
+                        const ws = fs.createWriteStream(this.sysHostsFile);
+                        ws.write(data, 'utf8', () => {
                             callback(null, i18n.__('renderer.applied_remote_successfully', name));
+
                             // write applied scheme id to config
-                            fs.readFile(this.configFile, 'utf8', (err, data)=> {
+                            fs.readFile(this.configFile, 'utf8', (err, data) => {
                                 if (!err) {
-                                    let config = JSON.parse(data);
+                                    const config = JSON.parse(data);
                                     config.appliedId = id;
-                                    fs.writeFile(this.configFile, JSON.stringify(config, null, 4), 'utf8', (err)=> {
-                                    });
+                                    fs.writeFile(this.configFile, JSON.stringify(config, null, 4), 'utf8', err => { });
+
+                                    // update tray
+                                    ipc.send('tray', config);
                                 }
                             });
                             this.flushDns();
                         });
-                        ws.on('error', (err)=> {
+                        ws.on('error', err => {
                             if (err.message.indexOf('operation not permitted') >= 0) {
                                 err = new Error(i18n.__('renderer.run_with_admin'));
                             }
                             callback(err);
                         });
                     }
-                })
+                });
             } else {
-                this.copyHostsContent(id, this.systemHostsId, (err)=> {
+                this.copyHostsContent(id, this.systemHostsId, err => {
                     if (err) {
                         if (err.message.indexOf('operation not permitted') >= 0) {
                             err = new Error(i18n.__('renderer.run_with_admin'));
@@ -1083,20 +1392,22 @@ class HostsDock {
                         callback(err);
                     } else {
                         callback(null, i18n.__('renderer.applied_local_successfully', name));
+
                         // write applied scheme id to config
-                        fs.readFile(this.configFile, 'utf8', (err, data)=> {
+                        fs.readFile(this.configFile, 'utf8', (err, data) => {
                             if (!err) {
-                                let config = JSON.parse(data);
+                                const config = JSON.parse(data);
                                 config.appliedId = id;
-                                fs.writeFile(this.configFile, JSON.stringify(config, null, 4), 'utf8', (err)=> {
-                                });
+                                fs.writeFile(this.configFile, JSON.stringify(config, null, 4), 'utf8', err => { });
+
+                                // update tray
+                                ipc.send('tray', config);
                             }
                         });
                         this.flushDns();
                     }
                 });
             }
-
         }
     }
 
@@ -1105,15 +1416,17 @@ class HostsDock {
      * @param e
      */
     applyClickHandler(e) {
-        var $this = $(e.currentTarget);
-        var $icon = $this.children('i');
+        const $this = $(e.currentTarget);
+        const $icon = $this.children('i');
         $this.attr('disabled', 'disabled');
-        $icon.removeClass('fa-check').addClass('fa-circle-o-notch fa-spin');
-        var $currentActiveBtn = $('.nav-items li.active .lk-hosts');
+        $icon.removeClass('fa-check')
+            .addClass('fa-circle-o-notch fa-spin');
+        const $currentActiveBtn = $('.nav-items li.active .lk-hosts');
         if ($currentActiveBtn.length > 0) {
-            var id = $currentActiveBtn.attr('data-hosts-id');
-            var url = $currentActiveBtn.attr('data-hosts-url');
-            var name = $currentActiveBtn.find('span').text();
+            const id = $currentActiveBtn.attr('data-hosts-id');
+            const url = $currentActiveBtn.attr('data-hosts-url');
+            const name = $currentActiveBtn.find('span')
+                .text();
             this.applyHosts(id, name, url, (err, msg) => {
                 if (err) {
                     swal({
@@ -1123,88 +1436,271 @@ class HostsDock {
                     });
                 } else {
                     this.popNotification(msg);
-                    $('.applied').hide();
-                    $currentActiveBtn.children('.applied').show();
+                    $('.applied')
+                        .hide();
+                    $currentActiveBtn.children('.applied')
+                        .show();
                 }
-                $icon.removeClass('fa-circle-o-notch fa-spin').addClass('fa-check');
+                $icon.removeClass('fa-circle-o-notch fa-spin')
+                    .addClass('fa-check');
                 $this.removeAttr('disabled');
-            })
+            });
         }
+    }
+
+    updateProgress(el, persent) {
+        if (persent > 100) {
+            persent = 100;
+        }
+        const txt = $(el).find('.cg-mask span').text();
+
+        // do not change dom if persent not modified
+        if (String(persent) === txt) {
+            return;
+        }
+        const deg = persent * 360 / 100;
+        const left = $(el).find('.circle-left');
+        const right = $(el).find('.circle-right');
+        if (deg > 180) {
+            // both left & right half circle need transform
+            left.css('transition-duration', '.3s');
+            right.css('transition-duration', '0s');
+            right.css('transform', 'rotate(180deg)');
+            left.css('transform', `rotate(${deg - 180}deg)`);
+        } else {
+            // only right half circle need transform
+            left.css('transition-duration', '.3s');
+            right.css('transition-duration', '.3s');
+            left.css('transform', 'rotate(0deg)');
+            right.css('transform', `rotate(${deg}deg)`);
+        }
+        $(el).find('.cg-mask span').text(persent);
+    }
+
+    generateReport(results) {
+        results.sort((prev, curr) => {
+            return prev.batchStart - curr.batchStart;
+        });
+        let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+        body { margin-left: 20px; }
+        ul { -webkit-padding-start: 0; list-style: none; }
+        li { font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace; font-size: 14px; }
+        .num { display: inline-block; width: 36px; }
+        .icon { display: inline-block; width: 20px; }
+        .alive { color: green; }
+        .dead { color: red; }
+        </style></head><body><h1></h1><ul>`;
+        results.forEach(item => {
+            let icon = '<span class="icon"></span>';
+            if (item.isAlive === true) {
+                icon = '<span class="icon alive">✔</span>';
+            } else if (item.isAlive === false) {
+                icon = '<span class="icon dead">✘</span>';
+            }
+            html += `
+            <li>${icon}<span class="num">${item.batchStart + 1}</span><span class="line">${item.line}</span></li>`;
+        });
+        html += '</ul></body></html>';
+        fs.writeFile(this.reportFile, html, err => {
+            if (err) {
+                swal({
+                    title: i18n.__('renderer.operation_failed'),
+                    text: err.message,
+                    type: 'error'
+                });
+                return;
+            }
+            let win = new BrowserWindow({
+                icon: path.join(__dirname, `${process.platform === 'win32' ? '../image/hostsdock.ico' : '../image/hostsdock.png'}`),
+                title: `HostsDock - ${i18n.__('renderer.test_report')}`
+            });
+            win.on('close', () => { 
+                win = null;
+            });
+            win.loadURL(this.reportFile);
+            win.setMenu(null);
+            win.show();
+        });
+    }
+
+    /**
+     * check click handler
+     * 
+     * @memberof HostsDock
+     */
+    checkClickHandler() {
+        swal({
+            title: i18n.__('renderer.test_hosts'),
+            text: `<p class="test-desc">${i18n.__('renderer.test_desc')}</p><div class="cg"><div class="cg-wrap">
+            <div class="circle-left-wrap"><div class="circle-left"></div></div>
+            <div class="circle-right-wrap"><div class="circle-right"></div></div>
+            <div class="cg-mask"><span>0</span>%</div>
+                    </div></div>`,
+            html: true,
+            showCancelButton: true,
+            confirmButtonText: i18n.__('renderer.start_test'),
+            cancelButtonText: i18n.__('renderer.cancel'),
+            closeOnConfirm: false
+        }, () => {
+            $('.sa-confirm-button-container .confirm').attr('disabled', 'disabled');
+            const lineCount = this.editor.session.getLength();
+            const reg = new RegExp('^(\\s*(?:(?:2(?:[0-4][0-9]|5[0-5])|[0-1]?[0-9]?[0-9])\\.){3}(?:(?:2(?:[0-4][0-9]|5[0-5])|[0-1]?[0-9]?[0-9])))((?:\\s+(?:[a-zA-Z0-9\\-\\*\\.]+[\\.]{1,}[a-zA-Z0-9\\-\\*]{1,}|localhost|broadcasthost)\\s*)+)$');
+            let len = 0;
+            const el = document.querySelector('.cg');
+            let batchStart = 0;
+            const batchSize = 20;
+            const results = [];
+            let batchProcess;
+
+            const cb = (line, batchStart, batchDone, isAlive) => {
+                len++;
+                results.push({
+                    line,
+                    batchStart,
+                    isAlive
+                });
+                this.updateProgress(el, Math.floor(len / lineCount * 100));
+                if (len === lineCount) {
+                    setTimeout(() => {
+                        swal({
+                            title: i18n.__('renderer.test_done'),
+                            text: i18n.__('renderer.test_done_desc'),
+                            type: 'success',
+                            showConfirmButton: false,
+                            timer: 1000
+                        });
+                        setTimeout(() => {
+                            this.generateReport(results);
+                        }, 1000);
+                    }, 1000);
+                } else if (batchDone) {
+                    batchProcess();
+                }
+            };
+
+            const ipHandler = (batchStart, line, cb, batchDone) => {
+                return isAlive => {
+                    cb(line, batchStart, batchDone, isAlive);
+                };
+            };
+
+            batchProcess = () => {
+                const max = batchStart + batchSize;
+                for (; batchStart < max; batchStart++) {
+                    if (batchStart >= lineCount) {
+                        return;
+                    }
+
+                    const line = this.editor.session.getLine(batchStart).trim();
+                    const batchDone = batchStart === (max - 1);
+    
+                    // exclude blank or comment line
+                    if (!line || line.startsWith('#')) {
+                        cb(line, batchStart, batchDone);
+                    } else {
+                        const matched = line.match(reg);
+                        if (matched && matched.length === 3) {
+                            const ip = matched[1];
+                            ping.sys.probe(ip, ipHandler(batchStart, line, cb, batchDone));
+                        } else {
+                            cb(line, batchStart, batchDone);
+                        }
+                    }
+                }
+            };
+            
+            batchProcess();
+        });
+    }
+
+    /**
+     * open sys folder click handler
+     * 
+     * @memberof HostsDock
+     */
+    sysClickHandler() {
+        shell.showItemInFolder(this.sysHostsFile);
     }
 
     /**
      * delete scheme handler
      */
     deleteClickHandler() {
-        var $currentActiveBtn = $('.nav-items li.active .lk-hosts');
+        const $currentActiveBtn = $('.nav-items li.active .lk-hosts');
         if ($currentActiveBtn.length > 0) {
-            var id = $currentActiveBtn.attr('data-hosts-id');
-            var url = $currentActiveBtn.attr('data-hosts-url');
-            var name = $currentActiveBtn.find('span').text();
+            const id = $currentActiveBtn.attr('data-hosts-id');
+            const url = $currentActiveBtn.attr('data-hosts-url');
+            const name = $currentActiveBtn.find('span')
+                .text();
+            const that = this;
             swal({
-                    title: i18n.__('renderer.del_scheme'),
-                    text: url ? i18n.__('renderer.del_scheme_remote_desc', name) : i18n.__('renderer.del_scheme_local_desc', name),
-                    type: 'warning',
-                    showCancelButton: true,
-                    confirmButtonColor: '#DD6B55',
-                    confirmButtonText: i18n.__('renderer.del_confirm'),
-                    cancelButtonText: i18n.__('renderer.cancel'),
-                    closeOnConfirm: false
-                }, function () {
-                    fs.readFile(this.configFile, 'utf8', (err, data)=> {
-                        if (err) {
+                title: i18n.__('renderer.del_scheme'),
+                text: url ? i18n.__('renderer.del_scheme_remote_desc', name) : i18n.__('renderer.del_scheme_local_desc', name),
+                type: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#DD6B55',
+                confirmButtonText: i18n.__('renderer.del_confirm'),
+                cancelButtonText: i18n.__('renderer.cancel'),
+                closeOnConfirm: false
+            }, () => {
+                fs.readFile(that.configFile, 'utf8', (err, data) => {
+                    if (err) {
+                        swal({
+                            title: i18n.__('renderer.operation_failed'),
+                            text: err.message,
+                            type: 'error'
+                        });
+                    } else {
+                        const config = JSON.parse(data);
+                        let hostsArray,
+                            hostsJson;
+                        if (url) {
+                            hostsArray = config.remoteHosts;
+                        } else {
+                            hostsArray = config.localHosts;
+                        }
+                        hostsArray.forEach(item => {
+                            if (item.id === id) {
+                                hostsJson = item;
+                                return false;
+                            }
+                        });
+                        if (hostsJson) {
+                            // remove this json
+                            hostsArray.splice(hostsArray.indexOf(hostsJson), 1);
+                            fs.writeFile(that.configFile, JSON.stringify(config, null, 4), 'utf8', err => {
+                                if (err) {
+                                    swal({
+                                        title: i18n.__('renderer.operation_failed'),
+                                        text: err.message,
+                                        type: 'error'
+                                    });
+                                } else {
+                                    $('.lk-hosts[data-hosts-id=system]')
+                                        .click();
+                                    $currentActiveBtn.parent()
+                                        .remove();
+                                    swal({
+                                        title: i18n.__('renderer.del_successfully'),
+                                        type: 'success',
+                                        showConfirmButton: false,
+                                        timer: 1500
+                                    });
+
+                                    // update tray
+                                    ipc.send('tray', config);
+                                }
+                            });
+                        } else {
                             swal({
                                 title: i18n.__('renderer.operation_failed'),
                                 text: err.message,
                                 type: 'error'
                             });
-                        } else {
-                            let config = JSON.parse(data);
-                            let hostsArray,
-                                hostsJson;
-                            if (url) {
-                                hostsArray = config.remoteHosts;
-                            } else {
-                                hostsArray = config.localHosts;
-                            }
-                            hostsArray.forEach((item)=> {
-                                if (item["id"] === id) {
-                                    hostsJson = item;
-                                    return false;
-                                }
-                            });
-                            if (hostsJson) {
-                                // remove this json
-                                hostsArray.splice(hostsArray.indexOf(hostsJson), 1);
-                                fs.writeFile(this.configFile, JSON.stringify(config, null, 4), 'utf8', (err)=> {
-                                    if (err) {
-                                        swal({
-                                            title: i18n.__('renderer.operation_failed'),
-                                            text: err.message,
-                                            type: 'error'
-                                        });
-                                    } else {
-                                        $('.lk-hosts[data-hosts-id=system]').click();
-                                        $currentActiveBtn.parent().remove();
-                                        swal({
-                                            title: i18n.__('renderer.del_successfully'),
-                                            type: 'success',
-                                            showConfirmButton: false,
-                                            timer: 1500
-                                        });
-                                    }
-                                })
-                            } else {
-                                swal({
-                                    title: i18n.__('renderer.operation_failed'),
-                                    text: err.message,
-                                    type: 'error'
-                                });
-                            }
                         }
-                    })
-                }
-            );
+                    }
+                });
+            });
         }
     }
 
@@ -1213,20 +1709,24 @@ class HostsDock {
      * @param e
      */
     refreshClickHandler(e) {
-        var $this = $(e.currentTarget);
-        var $icon = $this.children('i');
+        const $this = $(e.currentTarget);
+        const $icon = $this.children('i');
         $this.attr('disabled', 'disabled');
         $icon.addClass('fa-spin');
         this.editor.setReadOnly(true);
-        $('#btnUndo').attr('disabled', 'disabled');
-        $('#btnRedo').attr('disabled', 'disabled');
-        var $currentActiveBtn = $('.nav-items li.active .lk-hosts');
-        var id = $currentActiveBtn.attr('data-hosts-id');
-        var url = $currentActiveBtn.attr('data-hosts-url');
+        this.editor.session.setValue('', -1);
+        $('#btnUndo')
+            .attr('disabled', 'disabled');
+        $('#btnRedo')
+            .attr('disabled', 'disabled');
+        const $currentActiveBtn = $('.nav-items li.active .lk-hosts');
+        const id = $currentActiveBtn.attr('data-hosts-id');
+        const url = $currentActiveBtn.attr('data-hosts-url');
         if (!url) {
-            this.readHostsContent(id, (err, data)=> {
+            this.readHostsContent(id, (err, data) => {
                 // TODO:no longer perform callback when navigation changed
-                if ($('.nav-items li.active .lk-hosts').attr('data-hosts-id') === id) {
+                if ($('.nav-items li.active .lk-hosts')
+                    .attr('data-hosts-id') === id) {
                     if (err) {
                         swal({
                             title: i18n.__('renderer.load_hosts_failed'),
@@ -1239,7 +1739,7 @@ class HostsDock {
                             title: i18n.__('renderer.refresh_successfully'),
                             type: 'success',
                             showConfirmButton: false,
-                            timer: 1500
+                            timer: 1000
                         });
                         this.editor.setReadOnly(false);
                         this.editor.session.setValue(data, -1);
@@ -1249,9 +1749,10 @@ class HostsDock {
                 }
             });
         } else {
-            this.readHostsContent(id, url, (err, data)=> {
+            this.readHostsContent(id, url, (err, data) => {
                 // TODO:no longer perform callback when navigation changed
-                if ($('.nav-items li.active .lk-hosts').attr('data-hosts-id') === id) {
+                if ($('.nav-items li.active .lk-hosts')
+                    .attr('data-hosts-id') === id) {
                     if (err) {
                         swal({
                             title: i18n.__('renderer.get_remote_failed'),
@@ -1264,15 +1765,28 @@ class HostsDock {
                             title: i18n.__('renderer.refresh_successfully'),
                             type: 'success',
                             showConfirmButton: false,
-                            timer: 1500
+                            timer: 1000
                         });
                         this.editor.session.setValue(data, -1);
                     }
                     $icon.removeClass('fa-spin');
                     $this.removeAttr('disabled');
                 }
-            })
+            });
         }
+    }
+
+    /**
+     * export handler
+     */
+    exportClickHandler(e) {
+        const $currentActiveBtn = $('.nav-items li.active .lk-hosts');
+        const id = $currentActiveBtn.attr('data-hosts-id');
+        const url = $currentActiveBtn.attr('data-hosts-url');
+        ipc.send('save-dialog', {
+            id,
+            url
+        });
     }
 
     /**
@@ -1280,15 +1794,20 @@ class HostsDock {
      * @param e event object
      */
     mouseMoveHandler(e) {
-        var rowNum = e.editor.renderer.screenToTextCoordinates(e.clientX, e.clientY).row;
-        var currentBtnPos = $('.button-comment').attr('data-line');
+        const rowNum = e.editor.renderer.screenToTextCoordinates(e.clientX, e.clientY)
+            .row;
+        const currentBtnPos = $('.button-comment')
+            .attr('data-line');
         if (rowNum !== currentBtnPos) {
-            $('.button-comment').remove();
-            var $gutter = $('.ace_gutter-cell:contains(' + (rowNum + 1) + ')').map(function () {
-                if ($(this).text() == rowNum + 1) {
-                    return this;
-                }
-            });
+            $('.button-comment')
+                .remove();
+            const $gutter = $(`.ace_gutter-cell:contains(${rowNum + 1})`)
+                .map(function () {
+                    if ($(this)
+                        .text() == rowNum + 1) {
+                        return this;
+                    }
+                });
             if ($gutter.length > 0) {
                 $gutter.prepend(`<button class='button-comment' data-line='${rowNum}' title='${i18n.__('renderer.comment')}(Ctrl+/)'>#</button>`);
             }
@@ -1300,17 +1819,17 @@ class HostsDock {
      * @param e event object
      */
     gutterMousedownHandler(e) {
-        var $target = $(e.domEvent.target);
+        const $target = $(e.domEvent.target);
         if ($target.hasClass('button-comment')) {
             e.preventDefault();
-            var lineNum = $target.attr('data-line');
-            var line = this.editor.session.getLine(lineNum);
-            var existsComments = false;
-            var re = /^(\s*)#(.*)/;
+            const lineNum = $target.attr('data-line');
+            const line = this.editor.session.getLine(lineNum);
+            let existsComments = false;
+            const re = /^(\s*)#(.*)/;
 
             // add command.name, the purpose is to determine artificially modified when a change event is triggered
             this.editor.curOp = {
-                command: {name: 'commentClick'}
+                command: { name: 'commentClick' }
             };
 
             if (re.test(this.editor.session.getLine(lineNum))) {
@@ -1318,21 +1837,29 @@ class HostsDock {
             }
 
             if (existsComments) {
-                var m = line.match(re);
-                var newLine;
+                const m = line.match(re);
+                let newLine;
                 if (m) {
                     m.shift();
                     newLine = m.join('');
-                    ace.require(['ace/range'], (obj)=> {
+                    ace.require(['ace/range'], obj => {
                         this.editor.session.replace(new obj.Range(lineNum, 0, lineNum, line.length), newLine);
                     });
                 }
+            } else {
+                this.editor.session.indentRows(lineNum, lineNum, '#');
             }
-            else {
-                this.editor.session.indentRows(lineNum, lineNum, "#");
-            }
+
             // must reset to null
             this.editor.curOp = null;
+        }
+    }
+
+    scollHandler(top) {
+        if (top > 500) {
+            $('.top').show();
+        } else {
+            $('.top').hide();
         }
     }
 
@@ -1350,5 +1877,5 @@ class HostsDock {
     }
 }
 
-var hostsDock = new HostsDock();
-hostsDock.init();
+new HostsDock().init();
+

@@ -1,6 +1,7 @@
 {
   "main_menu": {
-    "program": "程式",
+    "file": "文件",
+    "new": "新建",
     "reload": "重新加載",
     "full_screen": "全屏模式",
     "exit": "退出",
@@ -9,16 +10,23 @@
     "cut": "剪切",
     "paste": "粘貼",
     "select_all": "全選",
+    "window": "窗口",
+    "min": "最小化",
     "help": "幫助",
     "version": "版本",
     "homepage": "項目主頁",
+    "issue": "問題反饋",
+    "devtool": "切換開發人員工具",
     "about": "關於作者"
+  },
+  "tray_menu": {
+    "win": "顯示主窗口"
   },
   "renderer": {
     "system": "系統",
     "system_desc": "系統hosts資訊",
     "system_hosts": "當前系統hosts",
-    "update_at": "更新於",
+    "update_at": "最後修改",
     "update_time": "系統hosts修改時間",
     "local": "本地",
     "local_desc":"本地hosts方案",
@@ -26,9 +34,12 @@
     "remote_desc":"遠程hosts方案",
     "btnNew": "新建",
     "btnRefresh":"重繪",
+    "btnExport":"匯出",
     "btnEdit":"編輯",
+    "btnCheck": "檢測hosts",
     "btnDelete":"删除",
     "btnApply":"應用",
+    "btnSysTxt": "打開系統目錄",
     "btnUndo":"撤銷",
     "btnRedo":"重做",
     "btnCopy":"複製",
@@ -77,6 +88,16 @@
     "del_confirm": "確定删除",
     "del_successfully": "删除成功",
     "refresh_successfully": "重繪成功",
-    "comment":"注釋"
+    "comment":"注釋",
+    "export_title": "匯出hosts文件",
+    "export_success": "匯出成功",
+    "file_path": "文件路徑",
+    "btnTop": "回到頂部",
+    "test_hosts": "測試hosts",
+    "start_test": "開始檢測",
+    "test_desc": "使用 ping 命令檢測該hosts中的ip是否連通",
+    "test_done": "完成檢測",
+    "test_done_desc": "正在打開檢測報告...",
+    "test_report": "檢測報告"
   }
 }
