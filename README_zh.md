@@ -1,4 +1,4 @@
-<a href="https://eshengsky.github.io/HostsDock/"><img src="https://github.com/eshengsky/HostsDock/blob/master/public/image/hostsdock.png" height="150" align="right"></a>
+<a href="https://eshengsky.github.io/HostsDock/"><img src="https://github.com/eshengsky/HostsDock/blob/master/public/image/hostsdock.png" height="120" align="right"></a>
 
 # HostsDock
 
