@@ -6,7 +6,7 @@
 
 :tada: 存储、管理、快速切换你的hosts，尤其适合需要在开发环境、测试环境和生产环境之间频繁切换的开发人员使用。基于 [Node.js](https://nodejs.org) 和 [Electron](http://electron.atom.io/) 构建。
 
-[https://eshengsky.github.io/HostsDock/](https://eshengsky.github.io/HostsDock/)
+[https://eshengsky.github.io/HostsDock/index_zh.html](https://eshengsky.github.io/HostsDock/index_zh.html)
 
 
 ## 界面预览
