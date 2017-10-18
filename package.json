@@ -12,7 +12,8 @@
     "package:mac": "electron-packager . --overwrite --platform=darwin --arch=x64 --out=out --icon=public/image/hostsdock.png",
     "package:win": "electron-packager . --overwrite --platform=win32 --arch=ia32 --out=out --icon=public/image/hostsdock.ico",
     "package:linux": "electron-packager . --overwrite --platform=linux --arch=x64 --out=out",
-    "package:installer": "node ./installer.js"
+    "package:installer": "node ./installer.js",
+    "package:inno": "cd inno && ISCC.exe ../setup.iss"
   },
   "repository": {
     "type": "git",

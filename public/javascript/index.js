@@ -172,7 +172,7 @@ class HostsDock {
             $('.nav-local')
                 .append(`<li><a class='lk-hosts' data-hosts-id='${this.originalHostsId}'><i class='applied fa fa-check' title='${i18n.__('renderer.applied')}'></i><i class='fa fa-file-text-o'></i> <span>${this.originalHostsName}</span><i class='loading fa fa-spinner fa-spin' title='${i18n.__('renderer.loading')}'></i></a></li>` +
                 `<li><a class='lk-hosts' data-hosts-id='${this.backupHostsId}'><i class='applied fa fa-check' title='${i18n.__('renderer.applied')}'></i><i class='fa fa-file-text-o'></i> <span>${this.backupHostsName}</span><i class='loading fa fa-spinner fa-spin' title='${i18n.__('renderer.loading')}'></i></a></li>`);
-            $(`.lk-hosts[data-hosts-id=${this.systemHostsId}]`)
+            $(`.lk-hosts[data-hosts-id='${this.systemHostsId}']`)
                 .click();
             ipc.send('tray', {
                 appliedId: '',
@@ -219,10 +219,10 @@ class HostsDock {
 
                     // already applied some scheme when last exit
                     if (appliedId && allIdArr.indexOf(appliedId) >= 0) {
-                        $(`.lk-hosts[data-hosts-id=${appliedId}]`)
+                        $(`.lk-hosts[data-hosts-id='${appliedId}']`)
                             .click();
                     } else {
-                        $(`.lk-hosts[data-hosts-id=${this.systemHostsId}]`)
+                        $(`.lk-hosts[data-hosts-id='${this.systemHostsId}']`)
                             .click();
                     }
 
@@ -355,7 +355,7 @@ class HostsDock {
                     this.popNotification(msg);
                     $('.applied')
                         .hide();
-                    const link = $(`.nav-items a[data-hosts-id=${id}]`);
+                    const link = $(`.nav-items a[data-hosts-id='${id}']`);
                     link.children('.applied')
                         .show();
                     link.click();
@@ -1093,7 +1093,7 @@ class HostsDock {
                                         $('.swal-form')
                                             .remove();
                                     } else {
-                                        const $btn = $(`.nav-items a[data-hosts-id=${id}]`);
+                                        const $btn = $(`.nav-items a[data-hosts-id='${id}']`);
                                         $btn.find('span')
                                             .text(name);
                                         if (oldUrl) {
@@ -1166,7 +1166,7 @@ class HostsDock {
                                             $('.swal-form')
                                                 .remove();
                                         } else {
-                                            const $btn = $(`.nav-items a[data-hosts-id=${id}]`);
+                                            const $btn = $(`.nav-items a[data-hosts-id='${id}']`);
                                             $btn.attr('data-hosts-url', url)
                                                 .find('span')
                                                 .text(name);
