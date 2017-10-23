@@ -19,9 +19,9 @@
         <h1 class="project-name">HostsDock</h1>
         <p><iframe src="https://ghbtns.com/github-btn.html?user=eshengsky&repo=HostsDock&type=star&count=true" frameborder="0" scrolling="0" width="115px" height="20px"></iframe></p>
         <h2 class="project-tagline">Store, manage and switch your hosts quickly.</h2>
-        <a href="https://github.com/eshengsky/HostsDock/releases/download/v3.0.0/HostsDock_3.0.0.exe" class="btn" title="Download Windows version"><i class="iconfont icon-windows2"></i> Windows</a>
-        <a href="https://github.com/eshengsky/HostsDock/releases/download/v3.0.0/HostsDock-linux-x64.zip" class="btn" title="Download Linux version"><i class="iconfont icon-linux"></i> Linux</a>
-        <a href="https://github.com/eshengsky/HostsDock/releases/download/v3.0.0/HostsDock-darwin-x64.zip" class="btn" title="Download MacOS version"><i class="iconfont icon-mac1"></i> Mac</a>
+        <a id="win" href="#" class="btn" title="Download Windows version"><i class="iconfont icon-windows2"></i> Windows</a>
+        <a id="linux" href="#" class="btn" title="Download Linux version"><i class="iconfont icon-linux"></i> Linux</a>
+        <a id="osx" href="#" class="btn" title="Download MacOS version"><i class="iconfont icon-mac1"></i> Mac</a>
         <a href="./index_zh.html" class="btn btn-lang" title="中文">中文</a>
     </section>
     <section class="main-content container">
@@ -149,6 +149,29 @@
             <span class="site-footer-credits">This page was hosted by <a href="https://pages.github.com">GitHub Pages</a>.</span>
         </footer>
     </section>
+    <script>
+        const url = 'https://api.github.com/repos/eshengsky/HostsDock/releases/latest';
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', url, true);
+        xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 400) {
+                const releases = JSON.parse(xhr.response).assets;
+                const win = releases.find(release => {
+                    return release.name.indexOf('.exe') >= 0
+                }).browser_download_url;
+                document.querySelector('#win').href = win;
+                const osx = releases.find(release => {
+                    return release.name.indexOf('darwin') >= 0
+                }).browser_download_url;
+                document.querySelector('#osx').href = osx;
+                const linux = releases.find(release => {
+                    return release.name.indexOf('linux') >= 0
+                }).browser_download_url;
+                document.querySelector('#linux').href = linux;
+            }
+        }
+        xhr.send(null);
+    </script>
 </body>
 
 </html>
