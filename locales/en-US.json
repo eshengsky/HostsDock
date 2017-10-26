@@ -17,6 +17,7 @@
     "homepage": "Project Homepage",
     "issue": "Submit issues",
     "devtool": "Toggle developer tools",
+    "checkupdate": "Check for update...",
     "about": "About Author"
   },
   "tray_menu": {
@@ -98,6 +99,10 @@
     "test_desc": "Use ping command to test ips in hosts",
     "test_done": "Test complete",
     "test_done_desc": "Opening test report...",
-    "test_report": "Test report"
+    "test_report": "Test report",
+    "no_update": "No update",
+    "no_update_desc": "You now use the latest version %s",
+    "has_update": "Latest version found",
+    "download_now": "Download"
   }
 }

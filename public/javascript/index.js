@@ -13,6 +13,7 @@ const request = require('request');
 const async = require('async');
 const ping = require('ping');
 const BrowserWindow = remote.BrowserWindow;
+const showdown = require('showdown');
 const i18n = require('i18n');
 const localeArray = ['en-US', 'zh-CN', 'zh-TW'];
 i18n.configure({
@@ -400,6 +401,67 @@ class HostsDock {
             }
         });
 
+        ipc.on('update', () => {
+            request({
+                url: 'https://api.github.com/repos/eshengsky/HostsDock/releases',
+                timeout: 3000,
+                headers: {
+                    'User-Agent': 'Mozilla'
+                }
+            }, (err, response, body) => {
+                if (err) {
+                    swal({
+                        title: i18n.__('renderer.operation_failed'),
+                        text: err.message,
+                        type: 'error'
+                    });
+                    return;
+                }
+                const data = JSON.parse(body);
+                const current = Number(app.getVersion().replace(/\./g, ''));
+                const versionStr = data[0].tag_name;
+                const name = data[0].name;
+                const version = Number(versionStr.replace('v', '').replace(/\./g, ''));
+                if (version > current) {
+                    // 有更新版本
+                    let changelog = data[0].body;
+                    const converter = new showdown.Converter();
+                    changelog = converter.makeHtml(changelog);
+
+                    swal({
+                        title: i18n.__('renderer.has_update'),
+                        text: `<div class="changelog"><p>${name}</p>${changelog}</div>`,
+                        html: true,
+                        showCancelButton: true,
+                        confirmButtonText: i18n.__('renderer.download_now'),
+                        cancelButtonText: i18n.__('renderer.cancel')
+                    }, () => {
+                        const assets = data[0].assets;
+                        let download = '';
+                        switch (this.platForm) {
+                            case 'win32':
+                                download = assets.find(t => t.name.includes('.exe')).browser_download_url;
+                                break;
+                            case 'darwin':
+                                download = assets.find(t => t.name.includes('darwin')).browser_download_url;
+                                break;
+                            default:
+                                download = assets.find(t => t.name.includes('linux')).browser_download_url;
+                                break;
+                        }
+                        shell.openExternal(download);
+                    });
+                } else {
+                    // 没有更新版本
+                    swal({
+                        title: i18n.__('renderer.no_update'),
+                        text: i18n.__('renderer.no_update_desc', versionStr),
+                        type: 'success'
+                    });
+                }
+            });
+        });
+
         // nav toggle
         $('.toggle-title')
             .on('click', e => {
@@ -449,18 +511,18 @@ class HostsDock {
                             $('#btnEdit').click();
                         }
                     }, {
-                        title: i18n.__('renderer.btnDelete'),
-                        icon: 'fa fa-trash-o',
-                        fn: () => {
-                            $('#btnDelete').click();
-                        }
-                    }, {}, {
-                        title: i18n.__('renderer.btnApply'),
-                        icon: 'fa fa-check',
-                        fn: () => {
-                            $('#btnApply').click();
-                        }
-                    });
+                            title: i18n.__('renderer.btnDelete'),
+                            icon: 'fa fa-trash-o',
+                            fn: () => {
+                                $('#btnDelete').click();
+                            }
+                        }, {}, {
+                            title: i18n.__('renderer.btnApply'),
+                            icon: 'fa fa-check',
+                            fn: () => {
+                                $('#btnApply').click();
+                            }
+                        });
                 } else {
                     items.push({}, {
                         title: i18n.__('renderer.btnSysTxt'),
@@ -764,7 +826,7 @@ class HostsDock {
                 .show();
             $('#btnSys')
                 .hide();
-            
+
             if (url) {
                 $('#editor-tool-dynamic')
                     .hide();
@@ -1514,7 +1576,7 @@ class HostsDock {
                 icon: path.join(__dirname, `${process.platform === 'win32' ? '../image/hostsdock.ico' : '../image/hostsdock.png'}`),
                 title: `HostsDock - ${i18n.__('renderer.test_report')}`
             });
-            win.on('close', () => { 
+            win.on('close', () => {
                 win = null;
             });
             win.loadURL(this.reportFile);
@@ -1593,7 +1655,7 @@ class HostsDock {
 
                     const line = this.editor.session.getLine(batchStart).trim();
                     const batchDone = batchStart === (max - 1);
-    
+
                     // exclude blank or comment line
                     if (!line || line.startsWith('#')) {
                         cb(line, batchStart, batchDone);
@@ -1608,7 +1670,7 @@ class HostsDock {
                     }
                 }
             };
-            
+
             batchProcess();
         });
     }

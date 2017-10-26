@@ -470,3 +470,7 @@ footer.nav-footer {
 .sweet-alert p.test-desc {
     margin-bottom: 20px;
 }
+
+.sweet-alert p .changelog {
+    text-align: left;
+}

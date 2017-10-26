@@ -7,6 +7,7 @@ const ipc = electron.ipcMain;
 const Tray = electron.Tray;
 const dialog = electron.dialog;
 
+
 // Module to control application life.
 const app = electron.app;
 
@@ -331,6 +332,14 @@ function initialize() {
                     return 'F12';
                 }()),
                 role: 'toggledevtools'
+            }, {
+                type: 'separator'
+            }, {
+                label: i18n.__('main_menu.checkupdate'),
+                click(item, focusedWindow) {
+                    // send to renderer
+                    focusedWindow.webContents.send('update', true);
+                }
             }, {
                 type: 'separator'
             }, {

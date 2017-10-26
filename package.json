@@ -1,7 +1,7 @@
 {
   "name": "hostsdock",
   "productName": "HostsDock",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Store, manage and switch your hosts easily.",
   "private": true,
   "main": "main.js",
@@ -13,7 +13,8 @@
     "package:win": "electron-packager . --overwrite --platform=win32 --arch=ia32 --out=out --icon=public/image/hostsdock.ico",
     "package:linux": "electron-packager . --overwrite --platform=linux --arch=x64 --out=out",
     "package:installer": "node ./installer.js",
-    "package:inno": "cd inno && ISCC.exe ../setup.iss"
+    "package:inno": "cd inno && ISCC.exe ../setup.iss",
+    "package:zip": "node ./node_modules/electron-installer-zip/bin/electron-installer-zip ./out/HostsDock-darwin-x64/HostsDock.app HostsDock out/"
   },
   "repository": {
     "type": "git",
@@ -33,7 +34,7 @@
   },
   "homepage": "https://github.com/eshengsky/HostsDock#readme",
   "devDependencies": {
-    "electron-prebuilt": "^1.2.2",
+    "electron": "1.7.9",
     "electron-winstaller": "^2.6.3",
     "npm-run-all": "^4.1.1",
     "rimraf": "^2.6.2"
@@ -44,7 +45,8 @@
     "moment": "^2.13.0",
     "node-notifier": "^4.6.0",
     "ping": "^0.2.2",
-    "request": "^2.72.0",
-    "shortid": "^2.2.6"
+    "request": "^2.83.0",
+    "shortid": "^2.2.6",
+    "showdown": "^1.8.0"
   }
 }

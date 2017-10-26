@@ -2,13 +2,13 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "HostsDock"
-#define MyAppVersion "3.0.0"
+#define MyAppVersion "3.1.0"
 #define MyAppURL "https://github.com/eshengsky/HostsDock"
 #define MyAppExeName "HostsDock.exe"
 #define MyAppPublisher "Sky.Sun"
 #define SourcePath "out\HostsDock-win32-ia32"
 #define OutputPath "out"
-#define OutputName "HostsDock_3.0.0"
+#define OutputName "HostsDock_3.1.0"
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application.
@@ -46,6 +46,7 @@ Source: "{#SourcePath}/*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: quicklaunchicon
+Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppName}"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent

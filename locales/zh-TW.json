@@ -17,6 +17,7 @@
     "homepage": "項目主頁",
     "issue": "問題反饋",
     "devtool": "切換開發人員工具",
+    "checkupdate": "檢查更新...",
     "about": "關於作者"
   },
   "tray_menu": {
@@ -98,6 +99,10 @@
     "test_desc": "使用 ping 命令檢測該hosts中的ip是否連通",
     "test_done": "完成檢測",
     "test_done_desc": "正在打開檢測報告...",
-    "test_report": "檢測報告"
+    "test_report": "檢測報告",
+    "no_update": "沒有更新",
+    "no_update_desc": "你已是最新版本 %s",
+    "has_update": "發現新版本",
+    "download_now": "立即下載"
   }
 }
