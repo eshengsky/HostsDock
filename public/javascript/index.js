@@ -15,7 +15,7 @@ const ping = require('ping');
 const BrowserWindow = remote.BrowserWindow;
 const showdown = require('showdown');
 const i18n = require('i18n');
-const localeArray = ['en-US', 'zh-CN', 'zh-TW'];
+const localeArray = ['en-US', 'zh-CN', 'zh-TW', 'it-IT'];
 i18n.configure({
     locales: localeArray,
     directory: path.join(__dirname, '../../locales'),
