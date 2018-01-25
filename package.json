@@ -34,12 +34,12 @@
   },
   "homepage": "https://github.com/eshengsky/HostsDock#readme",
   "devDependencies": {
-    "electron": "1.7.9",
     "electron-winstaller": "^2.6.3",
     "npm-run-all": "^4.1.1",
     "rimraf": "^2.6.2"
   },
   "dependencies": {
+    "electron": "1.8.1",
     "async": "^2.0.0-rc.5",
     "i18n": "^0.8.2",
     "moment": "^2.13.0",
