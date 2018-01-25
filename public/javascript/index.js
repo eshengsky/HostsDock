@@ -1610,7 +1610,7 @@ class HostsDock {
             let len = 0;
             const el = document.querySelector('.cg');
             let batchStart = 0;
-            const batchSize = 20;
+            const batchSize = 3;
             const results = [];
             let batchProcess;
 
