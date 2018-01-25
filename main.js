@@ -21,7 +21,7 @@ const debug = /--debug/.test(process.argv[2]);
 let mainWindow = null;
 let tray = null;
 const config = path.resolve(app.getPath('userData'), 'config.json');
-const localeArray = ['en-US', 'zh-CN', 'zh-TW'];
+const localeArray = ['en-US', 'zh-CN', 'zh-TW', 'it-IT'];
 
 function initialize() {
     const shouldQuit = makeSingleInstance();
@@ -283,6 +283,15 @@ function initialize() {
                 checked: locale === 'zh-TW',
                 click() {
                     setLocale('zh-TW');
+                    app.relaunch();
+                    app.exit(0);
+                }
+            }, {
+                label: 'In Italiano',
+                type: 'checkbox',
+                checked: locale === 'it-IT',
+                click() {
+                    setLocale('it-IT');
                     app.relaunch();
                     app.exit(0);
                 }
